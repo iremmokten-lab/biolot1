@@ -4,7 +4,12 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-import pandas as pd
+# Pandas yoksa uygulama çökmesin diye güvenli import
+try:
+    import pandas as pd
+    PANDAS_OK = True
+except Exception:
+    PANDAS_OK = False
 
 # -------------------------------
 # MOTOR IMPORT
@@ -51,7 +56,7 @@ def read_audit_log_text() -> str:
         return f.read()
 
 # -------------------------------
-# DEFAULT INPUTS (her tesis için başlangıç)
+# DEFAULT INPUTS
 # -------------------------------
 DEFAULT_INPUTS = {
     "electricity_kwh_year": 2500000.0,
@@ -72,15 +77,13 @@ DEFAULT_INPUTS = {
 # SESSION STATE INIT
 # -------------------------------
 if "facilities" not in st.session_state:
-    st.session_state["facilities"] = [
-        {"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}
-    ]
+    st.session_state["facilities"] = [{"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}]
 
 if "portfolio_result" not in st.session_state:
     st.session_state["portfolio_result"] = None
 
 # -------------------------------
-# STREAMLIT UI
+# UI
 # -------------------------------
 st.set_page_config(page_title="BIOLOT", layout="wide")
 st.title("BIOLOT – Portfolio Dashboard")
@@ -89,13 +92,16 @@ st.caption(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}")
 st.divider()
 
 # -------------------------------
-# ADD / REMOVE FACILITY
+# FACILITY MANAGEMENT
 # -------------------------------
 st.subheader("Tesis Yönetimi")
 
 c1, c2, c3 = st.columns([2, 1, 1])
 with c1:
-    new_facility_id = st.text_input("Yeni Tesis ID", value=f"FAC-{len(st.session_state['facilities'])+1:03d}")
+    new_facility_id = st.text_input(
+        "Yeni Tesis ID",
+        value=f"FAC-{len(st.session_state['facilities'])+1:03d}",
+    )
 with c2:
     if st.button("➕ Tesis Ekle", use_container_width=True):
         existing = [f["facility_id"] for f in st.session_state["facilities"]]
@@ -104,9 +110,7 @@ with c2:
         elif new_facility_id in existing:
             st.warning("Bu Tesis ID zaten var. Farklı bir ID yaz.")
         else:
-            st.session_state["facilities"].append(
-                {"facility_id": new_facility_id, "inputs": dict(DEFAULT_INPUTS)}
-            )
+            st.session_state["facilities"].append({"facility_id": new_facility_id, "inputs": dict(DEFAULT_INPUTS)})
             st.session_state["portfolio_result"] = None
             st.success(f"{new_facility_id} eklendi.")
 
@@ -115,10 +119,8 @@ with c3:
         st.session_state["portfolio_result"] = None
         st.success("Portfolio sonucu temizlendi.")
 
-remove_id = st.selectbox(
-    "Silmek istediğin tesisi seç (opsiyonel)",
-    options=["(silme)"] + [f["facility_id"] for f in st.session_state["facilities"]],
-)
+remove_options = ["(silme)"] + [f["facility_id"] for f in st.session_state["facilities"]]
+remove_id = st.selectbox("Silmek istediğin tesisi seç (opsiyonel)", options=remove_options)
 if st.button("🗑️ Seçili Tesisi Sil", disabled=(remove_id == "(silme)")):
     st.session_state["facilities"] = [f for f in st.session_state["facilities"] if f["facility_id"] != remove_id]
     st.session_state["portfolio_result"] = None
@@ -131,51 +133,90 @@ st.divider()
 # -------------------------------
 st.subheader("Tesis Girdileri")
 
-for idx, fac in enumerate(st.session_state["facilities"]):
-    fid = fac["facility_id"]
-    inputs = fac["inputs"]
+if len(st.session_state["facilities"]) == 0:
+    st.warning("Hiç tesis yok. Önce 'Tesis Ekle' ile en az 1 tesis ekle.")
+else:
+    for idx, fac in enumerate(st.session_state["facilities"]):
+        fid = fac["facility_id"]
+        inputs = fac["inputs"]
 
-    with st.expander(f"🏭 {fid} – Girdileri Düzenle", expanded=(idx == 0)):
-        colA, colB, colC = st.columns(3)
+        with st.expander(f"🏭 {fid} – Girdileri Düzenle", expanded=(idx == 0)):
+            colA, colB, colC = st.columns(3)
 
-        with colA:
-            electricity_kwh_year = st.number_input("Yıllık Elektrik (kWh)", min_value=0.0, value=float(inputs["electricity_kwh_year"]), key=f"{fid}_electricity")
-            natural_gas_m3_year = st.number_input("Yıllık Doğalgaz (m3)", min_value=0.0, value=float(inputs["natural_gas_m3_year"]), key=f"{fid}_gas")
-            area_m2 = st.number_input("Toplam Alan (m2)", min_value=1.0, value=float(inputs["area_m2"]), key=f"{fid}_area")
+            with colA:
+                electricity_kwh_year = st.number_input(
+                    "Yıllık Elektrik (kWh)", min_value=0.0, value=float(inputs["electricity_kwh_year"]),
+                    key=f"{fid}_electricity"
+                )
+                natural_gas_m3_year = st.number_input(
+                    "Yıllık Doğalgaz (m3)", min_value=0.0, value=float(inputs["natural_gas_m3_year"]),
+                    key=f"{fid}_gas"
+                )
+                area_m2 = st.number_input(
+                    "Toplam Alan (m2)", min_value=1.0, value=float(inputs["area_m2"]),
+                    key=f"{fid}_area"
+                )
 
-        with colB:
-            carbon_price = st.number_input("Karbon Fiyatı (€/ton)", min_value=0.0, value=float(inputs["carbon_price"]), key=f"{fid}_carbon_price")
-            grid_factor = st.number_input("Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=float(inputs["grid_factor"]), key=f"{fid}_grid_factor")
-            gas_factor = st.number_input("Gaz Emisyon Faktörü (kgCO2/m3)", min_value=0.0, value=float(inputs["gas_factor"]), key=f"{fid}_gas_factor")
+            with colB:
+                carbon_price = st.number_input(
+                    "Karbon Fiyatı (€/ton)", min_value=0.0, value=float(inputs["carbon_price"]),
+                    key=f"{fid}_carbon_price"
+                )
+                grid_factor = st.number_input(
+                    "Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=float(inputs["grid_factor"]),
+                    key=f"{fid}_grid_factor"
+                )
+                gas_factor = st.number_input(
+                    "Gaz Emisyon Faktörü (kgCO2/m3)", min_value=0.0, value=float(inputs["gas_factor"]),
+                    key=f"{fid}_gas_factor"
+                )
 
-        with colC:
-            delta_t = st.number_input("Yeşil Soğutma Etkisi (°C)", min_value=0.0, value=float(inputs["delta_t"]), key=f"{fid}_delta_t")
-            energy_sensitivity = st.number_input("1°C Başına Enerji Azalış Oranı", min_value=0.0, value=float(inputs["energy_sensitivity"]), key=f"{fid}_energy_sens")
-            beta = st.number_input("Bina Elastikiyet Katsayısı", min_value=0.0, value=float(inputs["beta"]), key=f"{fid}_beta")
+            with colC:
+                delta_t = st.number_input(
+                    "Yeşil Soğutma Etkisi (°C)", min_value=0.0, value=float(inputs["delta_t"]),
+                    key=f"{fid}_delta_t"
+                )
+                energy_sensitivity = st.number_input(
+                    "1°C Başına Enerji Azalış Oranı", min_value=0.0, value=float(inputs["energy_sensitivity"]),
+                    key=f"{fid}_energy_sens"
+                )
+                beta = st.number_input(
+                    "Bina Elastikiyet Katsayısı", min_value=0.0, value=float(inputs["beta"]),
+                    key=f"{fid}_beta"
+                )
 
-        st.markdown("**Su / Pompa**")
-        w1, w2, w3 = st.columns(3)
-        with w1:
-            water_baseline = st.number_input("Referans Su (m3/yıl)", min_value=0.0, value=float(inputs["water_baseline"]), key=f"{fid}_water_base")
-        with w2:
-            water_actual = st.number_input("Mevcut Su (m3/yıl)", min_value=0.0, value=float(inputs["water_actual"]), key=f"{fid}_water_act")
-        with w3:
-            pump_kwh_per_m3 = st.number_input("Pompa Enerji İndeksi (kWh/m3)", min_value=0.0, value=float(inputs["pump_kwh_per_m3"]), key=f"{fid}_pump_idx")
+            st.markdown("**Su / Pompa**")
+            w1, w2, w3 = st.columns(3)
+            with w1:
+                water_baseline = st.number_input(
+                    "Referans Su (m3/yıl)", min_value=0.0, value=float(inputs["water_baseline"]),
+                    key=f"{fid}_water_base"
+                )
+            with w2:
+                water_actual = st.number_input(
+                    "Mevcut Su (m3/yıl)", min_value=0.0, value=float(inputs["water_actual"]),
+                    key=f"{fid}_water_act"
+                )
+            with w3:
+                pump_kwh_per_m3 = st.number_input(
+                    "Pompa Enerji İndeksi (kWh/m3)", min_value=0.0, value=float(inputs["pump_kwh_per_m3"]),
+                    key=f"{fid}_pump_idx"
+                )
 
-        fac["inputs"] = {
-            "electricity_kwh_year": electricity_kwh_year,
-            "natural_gas_m3_year": natural_gas_m3_year,
-            "area_m2": area_m2,
-            "carbon_price": carbon_price,
-            "grid_factor": grid_factor,
-            "gas_factor": gas_factor,
-            "delta_t": delta_t,
-            "energy_sensitivity": energy_sensitivity,
-            "beta": beta,
-            "water_baseline": water_baseline,
-            "water_actual": water_actual,
-            "pump_kwh_per_m3": pump_kwh_per_m3,
-        }
+            fac["inputs"] = {
+                "electricity_kwh_year": electricity_kwh_year,
+                "natural_gas_m3_year": natural_gas_m3_year,
+                "area_m2": area_m2,
+                "carbon_price": carbon_price,
+                "grid_factor": grid_factor,
+                "gas_factor": gas_factor,
+                "delta_t": delta_t,
+                "energy_sensitivity": energy_sensitivity,
+                "beta": beta,
+                "water_baseline": water_baseline,
+                "water_actual": water_actual,
+                "pump_kwh_per_m3": pump_kwh_per_m3,
+            }
 
 st.divider()
 
@@ -187,13 +228,17 @@ run_all = st.button("🚀 Tüm Tesisleri Çalıştır", type="primary", use_cont
 
 def validate_inputs(fid: str, inp: dict) -> list:
     errors = []
-    if inp["area_m2"] <= 0:
+    if inp.get("area_m2", 0) <= 0:
         errors.append(f"{fid}: area_m2 0 veya negatif olamaz.")
-    if inp["electricity_kwh_year"] < 0 or inp["natural_gas_m3_year"] < 0:
+    if inp.get("electricity_kwh_year", 0) < 0 or inp.get("natural_gas_m3_year", 0) < 0:
         errors.append(f"{fid}: enerji değerleri negatif olamaz.")
     return errors
 
 if run_all:
+    if len(st.session_state["facilities"]) == 0:
+        st.error("Portfolio çalıştırmak için en az 1 tesis olmalı.")
+        st.stop()
+
     portfolio = {
         "meta": {
             "portfolio_id": "BIOLOT-PORTFOLIO",
@@ -222,6 +267,7 @@ if run_all:
             st.write("• " + e)
         st.stop()
 
+    # Run each facility
     for fac in st.session_state["facilities"]:
         fid = fac["facility_id"]
         inp = fac["inputs"]
@@ -245,6 +291,7 @@ if run_all:
 
         c = out.get("carbon", {})
         t = out.get("total_operational_gain", {})
+
         portfolio["portfolio_totals"]["scope1_ton"] += float(c.get("scope1_ton", 0.0))
         portfolio["portfolio_totals"]["scope2_ton"] += float(c.get("scope2_ton", 0.0))
         portfolio["portfolio_totals"]["total_ton"] += float(c.get("total_ton", 0.0))
@@ -256,7 +303,7 @@ if run_all:
     st.success("Portfolio analizi tamamlandı.")
 
 # -------------------------------
-# DASHBOARD (YATIRIMCI SEVİYESİ)
+# DASHBOARD
 # -------------------------------
 portfolio = st.session_state.get("portfolio_result")
 
@@ -264,7 +311,6 @@ if portfolio:
     totals = portfolio["portfolio_totals"]
 
     st.subheader("Portfolio KPI'lar")
-
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.metric("Tesis", f"{portfolio['meta']['facility_count']}")
     k2.metric("Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}")
@@ -273,7 +319,7 @@ if portfolio:
     k5.metric("Toplam Tasarruf (kWh/yıl)", f"{totals['total_saved_kwh']:.0f}")
     k6.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}")
 
-    # Tesis bazlı tablo
+    # Tesis bazlı tablo verisi
     rows = []
     for f in portfolio["facilities"]:
         fid = f["facility_id"]
@@ -290,39 +336,52 @@ if portfolio:
             "saved_eur": float(gain.get("total_saved_eur", 0.0)),
         })
 
-    df = pd.DataFrame(rows).sort_values("total_ton", ascending=False)
-
     st.divider()
     st.subheader("Tesis Karşılaştırma Tablosu")
-    st.dataframe(df, use_container_width=True, hide_index=True)
 
-    st.divider()
-    st.subheader("Grafikler")
+    if len(rows) == 0:
+        st.info("Tablo/grafik için veri yok.")
+    else:
+        if PANDAS_OK:
+            df = pd.DataFrame(rows).sort_values("total_ton", ascending=False)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            # pandas yoksa listeyi direkt göster
+            st.write(rows)
+            df = None
 
-    left, right = st.columns([2, 1])
-    with right:
-      max_n = len(df)
-if max_n == 0:
-    st.info("Grafikler için veri yok. Önce 'Tüm Tesisleri Çalıştır' yap.")
-    top_n = 0
-else:
-    top_n = st.slider(
-        "Grafikte gösterilecek tesis sayısı (Top N)",
-        min_value=1,
-        max_value=max_n,
-        value=min(5, max_n),
-    )
+        st.divider()
+        st.subheader("Grafikler")
 
-    df_top = df.head(top_n).set_index("facility_id")
+        # Top-N kontrol (asla patlamaz)
+        if PANDAS_OK:
+            max_n = len(df)
+            right_col = st.columns([2, 1])[1]
+            with right_col:
+                if max_n == 0:
+                    st.info("Grafikler için veri yok.")
+                    top_n = 0
+                else:
+                    top_n = st.slider(
+                        "Grafikte gösterilecek tesis sayısı (Top N)",
+                        min_value=1,
+                        max_value=max_n,
+                        value=min(5, max_n),
+                    )
 
-    st.markdown("### Emisyonlar (tCO2e/yıl) – Tesis Bazlı")
-    st.bar_chart(df_top[["scope1_ton", "scope2_ton", "total_ton"]], use_container_width=True)
+            if top_n > 0:
+                df_top = df.head(top_n).set_index("facility_id")
 
-    st.markdown("### Kaçınılan Maliyet (€ / yıl) – Tesis Bazlı")
-    st.bar_chart(df_top[["saved_eur"]], use_container_width=True)
+                st.markdown("### Emisyonlar (tCO2e/yıl) – Tesis Bazlı")
+                st.bar_chart(df_top[["scope1_ton", "scope2_ton", "total_ton"]], use_container_width=True)
 
-    st.markdown("### Enerji Tasarrufu (kWh/yıl) – Tesis Bazlı")
-    st.bar_chart(df_top[["saved_kwh"]], use_container_width=True)
+                st.markdown("### Kaçınılan Maliyet (€ / yıl) – Tesis Bazlı")
+                st.bar_chart(df_top[["saved_eur"]], use_container_width=True)
+
+                st.markdown("### Enerji Tasarrufu (kWh/yıl) – Tesis Bazlı")
+                st.bar_chart(df_top[["saved_kwh"]], use_container_width=True)
+        else:
+            st.info("Grafikler için pandas gerekiyor. (requirements.txt içine 'pandas' eklenmeli.)")
 
     st.divider()
 
@@ -356,6 +415,7 @@ else:
             use_container_width=True,
         )
         st.caption("runs.jsonl: Her satır bir tesis koşusunun audit kaydıdır (append-only).")
+    else:
+        st.info("Henüz audit log yok. Portfolio çalıştırınca oluşur.")
 else:
     st.info("Tesisleri ekleyip girdileri düzenledikten sonra 'Tüm Tesisleri Çalıştır' bas.")
-
