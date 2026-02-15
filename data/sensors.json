@@ -1,0 +1,54 @@
+{
+  "sensors": [
+    {
+      "id": "S1",
+      "name": "Sensör A - Sıcaklık/Nem",
+      "type": "T-RH",
+      "zone_id": "Z1",
+      "zone_name": "Zon 1 - Üretim Çevresi",
+      "lat": 40.21520,
+      "lon": 28.93300,
+      "last": { "temp_c": 30.1, "rh_pct": 44, "ts": "2026-02-15T18:00:00+03:00" }
+    },
+    {
+      "id": "S2",
+      "name": "Sensör B - Toprak Nem",
+      "type": "Soil",
+      "zone_id": "Z2",
+      "zone_name": "Zon 2 - Yeşil Bant",
+      "lat": 40.21395,
+      "lon": 28.93245,
+      "last": { "soil_moist_pct": 28, "temp_c": 28.2, "rh_pct": 52, "ts": "2026-02-15T18:00:00+03:00" }
+    },
+    {
+      "id": "S3",
+      "name": "Sensör C - Debi",
+      "type": "Flow",
+      "zone_id": "Z2",
+      "zone_name": "Zon 2 - Yeşil Bant",
+      "lat": 40.21405,
+      "lon": 28.93310,
+      "last": { "flow_lpm": 12.4, "temp_c": 27.6, "rh_pct": 55, "ts": "2026-02-15T18:00:00+03:00" }
+    },
+    {
+      "id": "S4",
+      "name": "Sensör D - Sıcaklık/Nem",
+      "type": "T-RH",
+      "zone_id": "Z3",
+      "zone_name": "Zon 3 - Depo & Otopark",
+      "lat": 40.21595,
+      "lon": 28.93510,
+      "last": { "temp_c": 32.0, "rh_pct": 38, "ts": "2026-02-15T18:00:00+03:00" }
+    },
+    {
+      "id": "S5",
+      "name": "Sensör E - Toprak Nem",
+      "type": "Soil",
+      "zone_id": "Z1",
+      "zone_name": "Zon 1 - Üretim Çevresi",
+      "lat": 40.21495,
+      "lon": 28.93370,
+      "last": { "soil_moist_pct": 21, "temp_c": 29.7, "rh_pct": 46, "ts": "2026-02-15T18:00:00+03:00" }
+    }
+  ]
+}
