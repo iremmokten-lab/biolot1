@@ -1,4 +1,6 @@
 import streamlit as st
+import json
+from datetime import datetime, timezone
 
 st.set_page_config(page_title="BIOLOT", layout="wide")
 st.title("BIOLOT - Endüstriyel Çevresel Performans Platformu")
@@ -113,8 +115,21 @@ if run:
     t3.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{toplam['total_saved_eur']:.0f}")
 
     st.divider()
-    with st.expander("Denetlenebilir Çıktı (JSON)"):
-        st.json(out)
+   with st.expander("Denetlenebilir Çıktı (JSON)"):
+    st.json(out)
+
+    # JSON'u indirilebilir dosya yap
+    json_text = json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True)
+    filename = f"biolot_audit_v{BIOL0T_ENGINE_VERSION}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+
+    st.download_button(
+        label="⬇️ JSON'u indir (audit-ready)",
+        data=json_text.encode("utf-8"),
+        file_name=filename,
+        mime="application/json",
+        use_container_width=True,
+    )
+
 
 else:
     st.info("Parametreleri girin ve analizi başlatın.")
