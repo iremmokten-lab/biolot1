@@ -262,7 +262,10 @@ def render_map_mode():
 
 
 # -------------------------
-# Plan modu (Y ters çevrildi ✅)
+# Plan modu (TERS DÖNME SORUNU ÇÖZÜLDÜ ✅)
+# Piksel mantığı: (0,0) sol-üst olsun
+# - Y verisini elle terslemiyoruz
+# - EKSENİ ters çeviriyoruz: range=[height, 0]
 # -------------------------
 def render_plan_mode():
     img_path = load_plan_image_path()
@@ -275,7 +278,7 @@ def render_plan_mode():
 
     fig = go.Figure()
 
-    # ✅ Arka plan (sende çalışan yöntem)
+    # Arka plan
     fig.add_layout_image(
         dict(
             source=img,
@@ -290,7 +293,7 @@ def render_plan_mode():
         )
     )
 
-    # Zonlar (Y düzeltme: height - y)
+    # Zonlar (polygon_px ham kullanılır)
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px", None)
@@ -298,7 +301,7 @@ def render_plan_mode():
                 continue
 
             xs = [p[0] for p in poly_px] + [poly_px[0][0]]
-            ys = [height - p[1] for p in poly_px] + [height - poly_px[0][1]]
+            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
 
             fig.add_trace(
                 go.Scatter(
@@ -310,13 +313,13 @@ def render_plan_mode():
                 )
             )
 
-    # Sensörler (Y düzeltme: height - y)
+    # Sensörler (x,y ham kullanılır)
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
                 xs.append(float(s["x"]))
-                ys.append(height - float(s["y"]))
+                ys.append(float(s["y"]))
                 names.append(s["name"])
 
         fig.add_trace(
@@ -331,8 +334,9 @@ def render_plan_mode():
             )
         )
 
+    # ✅ KRİTİK: Y eksenini ters çevir (0 üstte)
     fig.update_xaxes(visible=False, range=[0, width])
-    fig.update_yaxes(visible=False, range=[0, height], scaleanchor="x")
+    fig.update_yaxes(visible=False, range=[height, 0], scaleanchor="x")
 
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=0),
