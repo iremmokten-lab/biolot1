@@ -97,6 +97,27 @@ if run:
         water_actual=water_actual,
         pump_kwh_per_m3=pump_kwh_per_m3,
     )
+    run_id = str(uuid.uuid4())
+
+    append_audit_log(
+        run_id,
+        str(BIOL0T_ENGINE_VERSION),
+        inputs={
+            "electricity_kwh_year": electricity_kwh_year,
+            "natural_gas_m3_year": natural_gas_m3_year,
+            "area_m2": area_m2,
+            "carbon_price": carbon_price,
+            "grid_factor": grid_factor,
+            "gas_factor": gas_factor,
+            "delta_t": delta_t,
+            "energy_sensitivity": energy_sensitivity,
+            "beta": beta,
+            "water_baseline": water_baseline,
+            "water_actual": water_actual,
+            "pump_kwh_per_m3": pump_kwh_per_m3,
+        },
+        outputs=out,
+    )
 
     karbon = out["carbon"]
     hvac = out["hvac"]
