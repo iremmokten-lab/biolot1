@@ -181,6 +181,21 @@ if run:
             mime="application/json",
             use_container_width=True,
         )
+st.divider()
+st.subheader("Audit Log")
+
+log_text = read_audit_log_text()
+if log_text:
+    st.download_button(
+        label="⬇️ Audit log dosyasını indir (runs.jsonl)",
+        data=log_text.encode("utf-8"),
+        file_name="runs.jsonl",
+        mime="application/jsonl",
+        use_container_width=True,
+    )
+    st.caption("runs.jsonl: Her satır bir run kaydıdır (append-only).")
+else:
+    st.info("Henüz audit log kaydı yok. Analizi başlatınca oluşacak.")
 
 else:
     st.info("Parametreleri girin ve analizi başlatın.")
