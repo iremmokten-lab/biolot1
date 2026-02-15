@@ -11,6 +11,7 @@
         [40.21470, 28.93410],
         [40.21470, 28.93220]
       ],
+      "polygon_px": [[80,420],[560,420],[560,180],[80,180]],
       "style": { "color": "#2E7D32", "fillColor": "#66BB6A", "fillOpacity": 0.25 },
       "kpis": { "temp_avg_c": 29.4, "water_m3_day": 18.5, "risk_flag": "NORMAL" }
     },
@@ -25,6 +26,7 @@
         [40.21350, 28.93340],
         [40.21350, 28.93170]
       ],
+      "polygon_px": [[60,150],[420,150],[420,20],[60,20]],
       "style": { "color": "#1B5E20", "fillColor": "#A5D6A7", "fillOpacity": 0.30 },
       "kpis": { "temp_avg_c": 27.8, "water_m3_day": 25.2, "risk_flag": "OPTIMIZE" }
     },
@@ -39,6 +41,7 @@
         [40.21550, 28.93580],
         [40.21550, 28.93440]
       ],
+      "polygon_px": [[430,520],[640,520],[640,380],[430,380]],
       "style": { "color": "#C62828", "fillColor": "#EF9A9A", "fillOpacity": 0.22 },
       "kpis": { "temp_avg_c": 31.2, "water_m3_day": 6.0, "risk_flag": "HOTSPOT" }
     }
