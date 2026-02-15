@@ -8,7 +8,7 @@ import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
-# Tesis planı modu
+# Plan modu
 from PIL import Image
 import plotly.graph_objects as go
 
@@ -16,9 +16,6 @@ import plotly.graph_objects as go
 from engine import run_biolot
 
 
-# -------------------------
-# Sayfa ayarı
-# -------------------------
 st.set_page_config(page_title="BIOLOT | Dijital İkiz", layout="wide")
 st.title("Dijital İkiz (2D) — Zonlar • Sensörler • Katmanlar")
 st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu görseli üstü) aynı sayfada. Haritayı kaybetmiyoruz.")
@@ -31,9 +28,6 @@ PLAN_IMG_PNG = Path("assets/site_plan.png")
 PLAN_IMG_JPG = Path("assets/site_plan.jpg")
 
 
-# -------------------------
-# Helpers
-# -------------------------
 def load_json(path: Path):
     if not path.exists():
         st.error(f"Dosya bulunamadı: {path.as_posix()}")
@@ -59,9 +53,6 @@ def load_plan_image_path():
     return None
 
 
-# -------------------------
-# Data load
-# -------------------------
 zones_data = load_json(ZONES_PATH)
 sensors_data = load_json(SENSORS_PATH)
 
@@ -73,9 +64,7 @@ if not zones:
     st.stop()
 
 
-# -------------------------
-# Sidebar UI
-# -------------------------
+# ---------------- Sidebar ----------------
 st.sidebar.header("Mod")
 view_mode = st.sidebar.radio("Mod seç", ["Harita Modu", "Tesis Planı Modu"], index=0)
 
@@ -109,12 +98,8 @@ selected_zone_name = st.sidebar.selectbox("Zon seç", zone_names, index=0)
 selected_zone = next(z for z in zones if z["name"] == selected_zone_name)
 
 
-# -------------------------
-# Engine output + zone KPI
-# -------------------------
-total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones)
-if total_area_m2 <= 0:
-    total_area_m2 = 1.0
+# ---------------- Engine + KPI ----------------
+total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones) or 1.0
 
 out = run_biolot(
     electricity_kwh_year=electricity_kwh_year,
@@ -140,7 +125,6 @@ zone_area = float(selected_zone.get("area_m2", 0))
 zone_share = max(0.0, min(1.0, zone_area / total_area_m2))
 
 zone_kpi = {
-    "zone_share": zone_share,
     "total_ton": carbon_total["total_ton"] * zone_share,
     "risk_eur": carbon_total["risk_eur"] * zone_share,
     "hvac_saved_kwh": hvac_total["saved_kwh"] * zone_share,
@@ -159,14 +143,11 @@ else:
     risk_flag = "DÜŞÜK"
 
 
-# -------------------------
-# Right panel
-# -------------------------
 def render_right_panel():
     st.subheader("Zon Özeti")
     st.write(f"**Zon:** {selected_zone['name']}")
     st.write(f"**Alan:** {selected_zone.get('area_m2','-')} m²")
-    st.write(f"**Pay:** %{zone_share*100:.1f}")
+    st.write(f"**Pay:** %{(zone_share*100):.1f}")
     st.write(f"**Risk Seviyesi:** {risk_flag}")
 
     st.divider()
@@ -193,9 +174,6 @@ def render_right_panel():
         st.json(out)
 
 
-# -------------------------
-# Harita modu
-# -------------------------
 def render_map_mode():
     center_lat, center_lon = centroid_latlon(selected_zone["polygon"])
     m = folium.Map(location=[center_lat, center_lon], zoom_start=17, control_scale=True)
@@ -209,14 +187,6 @@ def render_map_mode():
             fill_color = style.get("fillColor", "#66BB6A")
             fill_opacity = style.get("fillOpacity", 0.25)
 
-            tooltip = f"{z['name']} | Alan: {z.get('area_m2','-')} m²"
-            popup = folium.Popup(
-                f"<b>{z['name']}</b><br>"
-                f"Alan: {z.get('area_m2','-')} m²<br>"
-                f"Not: {z.get('note','-')}",
-                max_width=350,
-            )
-
             folium.Polygon(
                 locations=poly,
                 color=color,
@@ -224,18 +194,15 @@ def render_map_mode():
                 fill_color=fill_color,
                 fill_opacity=fill_opacity,
                 weight=3,
-                tooltip=tooltip,
-                popup=popup,
+                tooltip=z["name"],
             ).add_to(zones_fg)
-
         zones_fg.add_to(m)
 
     if show_sensors:
         sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
         for s in sensors:
-            lat, lon = s["lat"], s["lon"]
             folium.CircleMarker(
-                location=[lat, lon],
+                location=[s["lat"], s["lon"]],
                 radius=6,
                 color="#1565C0",
                 fill=True,
@@ -249,9 +216,8 @@ def render_map_mode():
         heat_points = []
         for s in sensors:
             temp = s.get("last", {}).get("temp_c", None)
-            if temp is None:
-                continue
-            heat_points.append([s["lat"], s["lon"], float(temp)])
+            if temp is not None:
+                heat_points.append([s["lat"], s["lon"], float(temp)])
         if heat_points:
             hm_fg = folium.FeatureGroup(name="Isı Haritası (Temp)", show=True)
             HeatMap(heat_points, radius=28, blur=20, min_opacity=0.25).add_to(hm_fg)
@@ -261,13 +227,8 @@ def render_map_mode():
     st_folium(m, height=620, width=None)
 
 
-# -------------------------
-# Plan modu (TERS DÖNME SORUNU ÇÖZÜLDÜ ✅)
-# Piksel mantığı: (0,0) sol-üst olsun
-# - Y verisini elle terslemiyoruz
-# - EKSENİ ters çeviriyoruz: range=[height, 0]
-# -------------------------
 def render_plan_mode():
+    # ✅ Görseli Streamlit ile bas: garanti görünür
     img_path = load_plan_image_path()
     if not img_path:
         st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
@@ -276,44 +237,20 @@ def render_plan_mode():
     img = Image.open(img_path)
     width, height = img.size
 
+    st.image(img, caption="Tesis Planı (görsel)", use_container_width=True)
+
+    # ✅ Üstüne overlay çizimi: şeffaf plotly
     fig = go.Figure()
 
-    # Arka plan
-    fig.add_layout_image(
-        dict(
-            source=img,
-            xref="x",
-            yref="y",
-            x=0,
-            y=height,
-            sizex=width,
-            sizey=height,
-            sizing="stretch",
-            layer="below",
-        )
-    )
-
-    # Zonlar (polygon_px ham kullanılır)
     if show_zones:
         for z in zones:
-            poly_px = z.get("polygon_px", None)
+            poly_px = z.get("polygon_px")
             if not poly_px:
                 continue
-
             xs = [p[0] for p in poly_px] + [poly_px[0][0]]
             ys = [p[1] for p in poly_px] + [poly_px[0][1]]
+            fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=z["name"], line=dict(width=3)))
 
-            fig.add_trace(
-                go.Scatter(
-                    x=xs,
-                    y=ys,
-                    mode="lines",
-                    name=z["name"],
-                    line=dict(width=3),
-                )
-            )
-
-    # Sensörler (x,y ham kullanılır)
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
@@ -321,7 +258,6 @@ def render_plan_mode():
                 xs.append(float(s["x"]))
                 ys.append(float(s["y"]))
                 names.append(s["name"])
-
         fig.add_trace(
             go.Scatter(
                 x=xs,
@@ -334,26 +270,25 @@ def render_plan_mode():
             )
         )
 
-    # ✅ KRİTİK: Y eksenini ters çevir (0 üstte)
-    fig.update_xaxes(visible=False, range=[0, width])
-    fig.update_yaxes(visible=False, range=[height, 0], scaleanchor="x")
+    # ✅ Piksel mantığı: (0,0) sol-üst
+    fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
+    fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
         height=650,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
 
-# -------------------------
-# Layout
-# -------------------------
 left, right = st.columns([2, 1], gap="large")
 
 with left:
-    st.subheader("Harita")
+    st.subheader("Harita / Plan")
     if view_mode == "Harita Modu":
         render_map_mode()
     else:
