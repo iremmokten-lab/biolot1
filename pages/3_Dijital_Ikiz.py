@@ -4,21 +4,28 @@ from statistics import mean
 
 import streamlit as st
 
+# Harita modu
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
+
+# Tesis planı modu
+from PIL import Image
+import plotly.graph_objects as go
 
 # BIOLOT motor
 from engine import run_biolot
 
 
 st.set_page_config(page_title="BIOLOT | Dijital İkiz", layout="wide")
-st.title("Dijital İkiz (2D) — Zonlar • Sensörler • Katmanlar")
-st.caption("V1: Zon KPI'ları BIOLOT motor çıktısından türetilir (alan bazlı paylaştırma).")
+st.title("Dijital İkiz — Harita Modu / Tesis Planı Modu")
+st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu görseli üstü) aynı sayfada. Haritayı kaybetmiyoruz.")
 
 DATA_DIR = Path("data")
 ZONES_PATH = DATA_DIR / "zones.json"
 SENSORS_PATH = DATA_DIR / "sensors.json"
+PLAN_IMG_PATH_PNG = Path("assets/site_plan.png")
+PLAN_IMG_PATH_JPG = Path("assets/site_plan.jpg")
 
 
 def load_json(path: Path):
@@ -48,8 +55,12 @@ if not zones:
     st.stop()
 
 # -------------------------
-# Sidebar controls
+# Sidebar
 # -------------------------
+st.sidebar.header("Görünüm")
+view_mode = st.sidebar.radio("Mod seç", ["Harita Modu", "Tesis Planı Modu"], index=0)
+
+st.sidebar.divider()
 st.sidebar.header("Katmanlar")
 show_zones = st.sidebar.checkbox("Zonları göster", value=True)
 show_sensors = st.sidebar.checkbox("Sensörleri göster", value=True)
@@ -58,7 +69,6 @@ show_heatmap = st.sidebar.checkbox("Isı haritası (sensör sıcaklığı)", val
 st.sidebar.divider()
 st.sidebar.header("Tesis Parametreleri (BIOLOT Motor)")
 
-# NOSAB demo varsayılanları
 electricity_kwh_year = st.sidebar.number_input("Yıllık Elektrik (kWh)", min_value=0.0, value=2500000.0)
 natural_gas_m3_year = st.sidebar.number_input("Yıllık Doğalgaz (m3)", min_value=0.0, value=180000.0)
 
@@ -80,22 +90,12 @@ selected_zone_name = st.sidebar.selectbox("Zon seç", zone_names, index=0)
 selected_zone = next(z for z in zones if z["name"] == selected_zone_name)
 
 # -------------------------
-# Helpers
-# -------------------------
-def centroid(poly):
-    lats = [p[0] for p in poly]
-    lons = [p[1] for p in poly]
-    return (sum(lats) / len(lats), sum(lons) / len(lons))
-
-
-# -------------------------
 # BIOLOT motor çıktısı
 # -------------------------
 total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones)
 if total_area_m2 <= 0:
     total_area_m2 = 1.0
 
-# Motor çıktısı (toplam tesis için)
 out = run_biolot(
     electricity_kwh_year=electricity_kwh_year,
     natural_gas_m3_year=natural_gas_m3_year,
@@ -116,31 +116,21 @@ hvac_total = out["hvac"]
 water_total = out["water"]
 op_total = out["total_operational_gain"]
 
-# Seçili zon payı (alan bazlı)
 zone_area = float(selected_zone.get("area_m2", 0))
 zone_share = max(0.0, min(1.0, zone_area / total_area_m2))
 
-# Zon KPI: toplamı paylaştır
 zone_kpi = {
     "zone_share": zone_share,
-    "scope1_ton": carbon_total["scope1_ton"] * zone_share,
-    "scope2_ton": carbon_total["scope2_ton"] * zone_share,
     "total_ton": carbon_total["total_ton"] * zone_share,
     "risk_eur": carbon_total["risk_eur"] * zone_share,
     "hvac_saved_kwh": hvac_total["saved_kwh"] * zone_share,
-    "hvac_saved_co2_ton": hvac_total["saved_co2_ton"] * zone_share,
     "hvac_saved_eur": hvac_total["saved_eur"] * zone_share,
     "water_saved_m3": water_total["saved_water_m3"] * zone_share,
     "pump_saved_kwh": water_total["saved_pump_kwh"] * zone_share,
-    "water_saved_co2_ton": water_total["saved_co2_ton"] * zone_share,
-    "water_saved_eur": water_total["saved_eur"] * zone_share,
     "total_saved_kwh": op_total["total_saved_kwh"] * zone_share,
-    "total_saved_co2_ton": op_total["total_saved_co2_ton"] * zone_share,
     "total_saved_eur": op_total["total_saved_eur"] * zone_share,
 }
 
-# Basit risk flag (demo kuralı)
-# temp olmadığı için, risk'i karbon riski €/yıl bazlı normalize ediyoruz (gösterim için)
 if zone_kpi["risk_eur"] > 50000:
     risk_flag = "YÜKSEK"
 elif zone_kpi["risk_eur"] > 20000:
@@ -149,102 +139,9 @@ else:
     risk_flag = "DÜŞÜK"
 
 # -------------------------
-# Map
+# Right panel (ortak)
 # -------------------------
-center_lat, center_lon = centroid(selected_zone["polygon"])
-m = folium.Map(location=[center_lat, center_lon], zoom_start=17, control_scale=True)
-
-if show_zones:
-    zones_fg = folium.FeatureGroup(name="Zonlar", show=True)
-    for z in zones:
-        poly = z["polygon"]
-        color = z.get("style", {}).get("color", "#2E7D32")
-        fill_color = z.get("style", {}).get("fillColor", "#66BB6A")
-        fill_opacity = z.get("style", {}).get("fillOpacity", 0.25)
-
-        tooltip = f"{z['name']} | Alan: {z.get('area_m2','-')} m²"
-        popup = folium.Popup(
-            f"<b>{z['name']}</b><br>"
-            f"Alan: {z.get('area_m2','-')} m²<br>"
-            f"Not: {z.get('note','-')}",
-            max_width=350,
-        )
-
-        folium.Polygon(
-            locations=poly,
-            color=color,
-            fill=True,
-            fill_color=fill_color,
-            fill_opacity=fill_opacity,
-            weight=3,
-            tooltip=tooltip,
-            popup=popup,
-        ).add_to(zones_fg)
-
-    zones_fg.add_to(m)
-
-zone_id = selected_zone["id"]
-zone_sensors = [s for s in sensors if s.get("zone_id") == zone_id]
-
-if show_sensors:
-    sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
-    for s in sensors:
-        lat, lon = s["lat"], s["lon"]
-        last = s.get("last", {})
-        temp = last.get("temp_c", None)
-        rh = last.get("rh_pct", None)
-        soil = last.get("soil_moist_pct", None)
-        flow = last.get("flow_lpm", None)
-
-        popup_html = (
-            f"<b>{s['name']}</b><br>"
-            f"Tip: {s.get('type','-')}<br>"
-            f"Zon: {s.get('zone_name','-')}<br><br>"
-            f"Sıcaklık: {temp if temp is not None else '-'} °C<br>"
-            f"Nem: {rh if rh is not None else '-'} %<br>"
-            f"Toprak Nem: {soil if soil is not None else '-'} %<br>"
-            f"Debi: {flow if flow is not None else '-'} L/dk<br>"
-            f"Zaman: {last.get('ts','-')}"
-        )
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=6,
-            color="#1565C0",
-            fill=True,
-            fill_color="#1E88E5",
-            fill_opacity=0.9,
-            tooltip=s["name"],
-            popup=folium.Popup(popup_html, max_width=350),
-        ).add_to(sens_fg)
-
-    sens_fg.add_to(m)
-
-if show_heatmap:
-    heat_points = []
-    for s in sensors:
-        temp = s.get("last", {}).get("temp_c", None)
-        if temp is None:
-            continue
-        heat_points.append([s["lat"], s["lon"], float(temp)])
-
-    if heat_points:
-        hm_fg = folium.FeatureGroup(name="Isı Haritası (Temp)", show=True)
-        HeatMap(heat_points, radius=28, blur=20, min_opacity=0.25).add_to(hm_fg)
-        hm_fg.add_to(m)
-
-folium.LayerControl(collapsed=False).add_to(m)
-
-# -------------------------
-# Layout
-# -------------------------
-left, right = st.columns([2, 1], gap="large")
-
-with left:
-    st.subheader("Harita")
-    st_folium(m, height=620, width=None)
-
-with right:
+def render_right_panel():
     st.subheader("Zon Özeti")
     st.write(f"**Zon:** {selected_zone['name']}")
     st.write(f"**Alan:** {selected_zone.get('area_m2','-')} m²")
@@ -253,40 +150,212 @@ with right:
 
     st.divider()
     st.subheader("Zon KPI (BIOLOT)")
-
     a1, a2 = st.columns(2)
     a1.metric("Zon Toplam CO2 (t/yıl)", f"{zone_kpi['total_ton']:.2f}")
     a2.metric("Zon Karbon Riski (€)", f"{zone_kpi['risk_eur']:.0f}")
 
     b1, b2 = st.columns(2)
     b1.metric("Zon HVAC Tasarruf (kWh/yıl)", f"{zone_kpi['hvac_saved_kwh']:.0f}")
-    b2.metric("Zon HVAC €", f"{zone_kpi['hvac_saved_eur']:.0f}")
+    b2.metric("Zon HVAC (€)", f"{zone_kpi['hvac_saved_eur']:.0f}")
 
     c1, c2 = st.columns(2)
-    c1.metric("Zon Su Tasarruf (m3/yıl)", f"{zone_kpi['water_saved_m3']:.0f}")
+    c1.metric("Zon Su Tasarruf (m³/yıl)", f"{zone_kpi['water_saved_m3']:.0f}")
     c2.metric("Zon Pompa kWh", f"{zone_kpi['pump_saved_kwh']:.0f}")
 
     d1, d2 = st.columns(2)
     d1.metric("Zon Toplam kWh", f"{zone_kpi['total_saved_kwh']:.0f}")
-    d2.metric("Zon Toplam €", f"{zone_kpi['total_saved_eur']:.0f}")
+    d2.metric("Zon Toplam (€)", f"{zone_kpi['total_saved_eur']:.0f}")
 
     st.divider()
-    st.subheader("Zon Sensör Özeti")
-    if not zone_sensors:
-        st.info("Bu zona bağlı sensör yok.")
-    else:
-        temps = [s.get("last", {}).get("temp_c") for s in zone_sensors if s.get("last", {}).get("temp_c") is not None]
-        rhs = [s.get("last", {}).get("rh_pct") for s in zone_sensors if s.get("last", {}).get("rh_pct") is not None]
-        soilm = [s.get("last", {}).get("soil_moist_pct") for s in zone_sensors if s.get("last", {}).get("soil_moist_pct") is not None]
-
-        st.write(f"**Sensör sayısı:** {len(zone_sensors)}")
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Temp ort (°C)", "-" if not temps else f"{mean(temps):.1f}")
-        s2.metric("Nem ort (%)", "-" if not rhs else f"{mean(rhs):.0f}")
-        s3.metric("Toprak nem ort (%)", "-" if not soilm else f"{mean(soilm):.0f}")
-
     with st.expander("Denetlenebilir çıktı (motor JSON)"):
         st.json(out)
 
-    with st.expander("Denetlenebilir çıktı (zon KPI hesap)"):
-        st.json(zone_kpi)
+# -------------------------
+# Harita Modu
+# -------------------------
+def centroid_latlon(poly):
+    lats = [p[0] for p in poly]
+    lons = [p[1] for p in poly]
+    return (sum(lats) / len(lats), sum(lons) / len(lons))
+
+
+def render_map_mode():
+    center_lat, center_lon = centroid_latlon(selected_zone["polygon"])
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=17, control_scale=True)
+
+    if show_zones:
+        zones_fg = folium.FeatureGroup(name="Zonlar", show=True)
+        for z in zones:
+            poly = z["polygon"]
+            color = z.get("style", {}).get("color", "#2E7D32")
+            fill_color = z.get("style", {}).get("fillColor", "#66BB6A")
+            fill_opacity = z.get("style", {}).get("fillOpacity", 0.25)
+
+            tooltip = f"{z['name']} | Alan: {z.get('area_m2','-')} m²"
+            popup = folium.Popup(
+                f"<b>{z['name']}</b><br>"
+                f"Alan: {z.get('area_m2','-')} m²<br>"
+                f"Not: {z.get('note','-')}",
+                max_width=350,
+            )
+
+            folium.Polygon(
+                locations=poly,
+                color=color,
+                fill=True,
+                fill_color=fill_color,
+                fill_opacity=fill_opacity,
+                weight=3,
+                tooltip=tooltip,
+                popup=popup,
+            ).add_to(zones_fg)
+        zones_fg.add_to(m)
+
+    if show_sensors:
+        sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
+        for s in sensors:
+            lat, lon = s["lat"], s["lon"]
+            last = s.get("last", {})
+            temp = last.get("temp_c", None)
+
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=6,
+                color="#1565C0",
+                fill=True,
+                fill_color="#1E88E5",
+                fill_opacity=0.9,
+                tooltip=s["name"],
+            ).add_to(sens_fg)
+        sens_fg.add_to(m)
+
+    if show_heatmap:
+        heat_points = []
+        for s in sensors:
+            temp = s.get("last", {}).get("temp_c", None)
+            if temp is None:
+                continue
+            heat_points.append([s["lat"], s["lon"], float(temp)])
+        if heat_points:
+            hm_fg = folium.FeatureGroup(name="Isı Haritası (Temp)", show=True)
+            HeatMap(heat_points, radius=28, blur=20, min_opacity=0.25).add_to(hm_fg)
+            hm_fg.add_to(m)
+
+    folium.LayerControl(collapsed=False).add_to(m)
+    st_folium(m, height=620, width=None)
+
+# -------------------------
+# Tesis Planı Modu
+# -------------------------
+def load_plan_image():
+    if PLAN_IMG_PATH_PNG.exists():
+        return PLAN_IMG_PATH_PNG.as_posix()
+    if PLAN_IMG_PATH_JPG.exists():
+        return PLAN_IMG_PATH_JPG.as_posix()
+    return None
+
+
+def render_plan_mode():
+    img_path = load_plan_image()
+    if not img_path:
+        st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
+        st.stop()
+
+    img = Image.open(img_path)
+    width, height = img.size
+
+    fig = go.Figure()
+
+    # arka plan görsel
+    fig.add_layout_image(
+        dict(
+            source=img,
+            xref="x",
+            yref="y",
+            x=0,
+            y=height,
+            sizex=width,
+            sizey=height,
+            sizing="stretch",
+            layer="below",
+        )
+    )
+
+    # Zon overlay: zones.json içinde polygon_px varsa onu kullan
+    # yoksa demo olarak basit kutular çizer (sen düzeltince gerçek olur)
+    if show_zones:
+        for z in zones:
+            poly_px = z.get("polygon_px", None)
+
+            if not poly_px:
+                # Demo fallback (görselde bir şey gözüksün diye)
+                poly_px = [[50, height-50], [350, height-50], [350, height-250], [50, height-250]]
+
+            xs = [p[0] for p in poly_px] + [poly_px[0][0]]
+            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    name=z["name"],
+                    line=dict(width=3),
+                )
+            )
+
+    # Sensör overlay: sensors.json içinde x,y varsa onu kullan
+    if show_sensors:
+        xs, ys, names = [], [], []
+        for s in sensors:
+            if "x" in s and "y" in s:
+                xs.append(float(s["x"]))
+                ys.append(float(s["y"]))
+                names.append(s["name"])
+
+        # fallback demo sensor
+        if not xs:
+            xs = [width * 0.35, width * 0.55, width * 0.70]
+            ys = [height * 0.55, height * 0.40, height * 0.65]
+            names = ["Sensör (demo)", "Sensör (demo)", "Sensör (demo)"]
+
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode="markers+text",
+                text=names,
+                textposition="top center",
+                marker=dict(size=12),
+                name="Sensörler",
+            )
+        )
+
+    # Heatmap: plotly ile basit yoğunluk (temp varsa ağırlık gibi)
+    # (Opsiyonel: şimdilik sadece marker üstü kalabilir. İstersen sonraki adımda ekleriz.)
+
+    fig.update_xaxes(visible=False, range=[0, width])
+    fig.update_yaxes(visible=False, range=[0, height], scaleanchor="x")
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=650)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.info(
+        "Plan modunda doğru çizim için zones.json'a her zona 'polygon_px', sensors.json'a sensörlere 'x' ve 'y' ekleyeceğiz. "
+        "Şimdilik demo overlay gösteriyorum."
+    )
+
+# -------------------------
+# Page layout
+# -------------------------
+left, right = st.columns([2, 1], gap="large")
+
+with left:
+    st.subheader("Görünüm")
+    if view_mode == "Harita Modu":
+        render_map_mode()
+    else:
+        render_plan_mode()
+
+with right:
+    render_right_panel()
