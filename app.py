@@ -1,6 +1,9 @@
 import streamlit as st
 import json
 from datetime import datetime, timezone
+import os
+import uuid
+
 
 st.set_page_config(page_title="BIOLOT", layout="wide")
 st.title("BIOLOT - Endüstriyel Çevresel Performans Platformu")
