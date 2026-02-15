@@ -5,7 +5,7 @@ st.title("BIOLOT - Web Demo")
 
 # ---- import engine
 try:
-    from engine import calc_scope12, calc_hvac_savings_simple
+    from engine import calc_scope12, calc_hvac_savings_simple, calc_water_savings
     st.success("engine import OK")
 except Exception as e:
     st.error("engine import FAILED")
@@ -15,6 +15,7 @@ except Exception as e:
 # ---- inputs
 st.sidebar.header("Inputs")
 
+st.sidebar.subheader("Energy")
 electricity_kwh_year = st.sidebar.number_input(
     "Electricity (kWh/year)",
     min_value=0.0,
@@ -27,11 +28,29 @@ natural_gas_m3_year = st.sidebar.number_input(
     value=180000.0
 )
 
+st.sidebar.divider()
+st.sidebar.subheader("Carbon settings")
+
 carbon_price = st.sidebar.number_input(
     "Carbon price (EUR/ton)",
     min_value=0.0,
     value=85.5
 )
+
+grid_factor = st.sidebar.number_input(
+    "Grid factor (kgCO2/kWh)",
+    min_value=0.0,
+    value=0.43
+)
+
+gas_factor = st.sidebar.number_input(
+    "Gas factor (kgCO2/m3)",
+    min_value=0.0,
+    value=2.0
+)
+
+st.sidebar.divider()
+st.sidebar.subheader("Facility")
 
 area_m2 = st.sidebar.number_input(
     "Factory area (m2)",
@@ -60,6 +79,27 @@ beta = st.sidebar.number_input(
     value=0.5
 )
 
+st.sidebar.divider()
+st.sidebar.subheader("Water / Pump")
+
+water_baseline = st.sidebar.number_input(
+    "Water baseline (m3/year)",
+    min_value=0.0,
+    value=12000.0
+)
+
+water_actual = st.sidebar.number_input(
+    "Water actual (m3/year)",
+    min_value=0.0,
+    value=8000.0
+)
+
+pump_kwh_per_m3 = st.sidebar.number_input(
+    "Pump energy index (kWh/m3)",
+    min_value=0.0,
+    value=0.4
+)
+
 st.divider()
 st.subheader("Calculation")
 
@@ -70,6 +110,8 @@ if run:
     r = calc_scope12(
         electricity_kwh_year=electricity_kwh_year,
         natural_gas_m3_year=natural_gas_m3_year,
+        grid_factor_kg_per_kwh=grid_factor,
+        gas_factor_kg_per_m3=gas_factor,
         carbon_price_eur_per_ton=carbon_price,
     )
 
@@ -104,6 +146,8 @@ if run:
         delta_t_c=delta_t,
         energy_sensitivity_per_c=energy_sensitivity,
         beta=beta,
+        grid_factor_kg_per_kwh=grid_factor,
+        carbon_price_eur_per_ton=carbon_price,
     )
 
     st.divider()
@@ -114,11 +158,42 @@ if run:
     h2.metric("Avoided CO2 (ton/yr)", f"{hvac['saved_co2_ton']:.2f}")
     h3.metric("Avoided cost (EUR/yr)", f"{hvac['saved_eur']:.0f}")
 
+    # --- water
+    water = calc_water_savings(
+        water_baseline_m3_year=water_baseline,
+        water_actual_m3_year=water_actual,
+        pump_kwh_per_m3=pump_kwh_per_m3,
+        grid_factor_kg_per_kwh=grid_factor,
+        carbon_price_eur_per_ton=carbon_price,
+    )
+
+    st.divider()
+    st.subheader("Water & Pump Impact")
+
+    w1, w2, w3 = st.columns(3)
+    w1.metric("Saved water (m3/yr)", f"{water['saved_water_m3']:.0f}")
+    w2.metric("Pump saving (kWh/yr)", f"{water['saved_pump_kwh']:.0f}")
+    w3.metric("Avoided cost (EUR/yr)", f"{water['saved_eur']:.0f}")
+
+    # --- total operational gain (HVAC + Pump)
+    total_saved_kwh = hvac["saved_kwh"] + water["saved_pump_kwh"]
+    total_saved_co2_ton = hvac["saved_co2_ton"] + water["saved_co2_ton"]
+    total_saved_eur = hvac["saved_eur"] + water["saved_eur"]
+
+    st.divider()
+    st.subheader("Total Operational Gain (HVAC + Pump)")
+
+    t1, t2, t3 = st.columns(3)
+    t1.metric("Total saving (kWh/yr)", f"{total_saved_kwh:.0f}")
+    t2.metric("Total avoided CO2 (ton/yr)", f"{total_saved_co2_ton:.2f}")
+    t3.metric("Total avoided cost (EUR/yr)", f"{total_saved_eur:.0f}")
+
     st.divider()
     st.subheader("Raw results")
-    colA, colB = st.columns(2)
+    colA, colB, colC = st.columns(3)
     colA.json(r)
     colB.json(hvac)
+    colC.json(water)
 
 else:
     st.info("Change values on the left and press Calculate.")
