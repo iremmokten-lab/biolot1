@@ -262,7 +262,7 @@ def render_map_mode():
 
 
 # -------------------------
-# Plan modu (GÜVENLİ - görsel kaybolmaz)
+# Plan modu (Y ters çevrildi ✅)
 # -------------------------
 def render_plan_mode():
     img_path = load_plan_image_path()
@@ -275,7 +275,7 @@ def render_plan_mode():
 
     fig = go.Figure()
 
-    # ✅ Arka plan (SENDE ÇALIŞAN yöntem)
+    # ✅ Arka plan (sende çalışan yöntem)
     fig.add_layout_image(
         dict(
             source=img,
@@ -290,15 +290,15 @@ def render_plan_mode():
         )
     )
 
-    # Zonlar
+    # Zonlar (Y düzeltme: height - y)
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px", None)
             if not poly_px:
-                continue  # polygon_px yoksa plan modunda çizme
+                continue
 
             xs = [p[0] for p in poly_px] + [poly_px[0][0]]
-            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
+            ys = [height - p[1] for p in poly_px] + [height - poly_px[0][1]]
 
             fig.add_trace(
                 go.Scatter(
@@ -310,13 +310,13 @@ def render_plan_mode():
                 )
             )
 
-    # Sensörler
+    # Sensörler (Y düzeltme: height - y)
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
                 xs.append(float(s["x"]))
-                ys.append(float(s["y"]))
+                ys.append(height - float(s["y"]))
                 names.append(s["name"])
 
         fig.add_trace(
