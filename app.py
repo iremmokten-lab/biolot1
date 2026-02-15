@@ -4,8 +4,8 @@ st.set_page_config(page_title="BIOLOT Demo", layout="wide")
 st.title("BIOLOT - Web Demo")
 
 # ---- import engine
-try:
-    from engine import calc_scope12
+try:from engine import calc_scope12, calc_hvac_savings_simple
+
     st.success("engine import OK")
 except Exception as e:
     st.error("engine import FAILED")
