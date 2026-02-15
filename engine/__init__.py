@@ -1,3 +1,5 @@
+BIOL0T_ENGINE_VERSION = "0.1.0"
+
 # engine/__init__.py
 
 def calc_scope12(
@@ -67,4 +69,73 @@ def calc_water_savings(
         "saved_pump_kwh": saved_pump_kwh,
         "saved_co2_ton": saved_co2_ton,
         "saved_eur": saved_eur
+    }
+def run_biolot(
+    electricity_kwh_year,
+    natural_gas_m3_year,
+    area_m2,
+    carbon_price,
+    grid_factor,
+    gas_factor,
+    delta_t,
+    energy_sensitivity,
+    beta,
+    water_baseline,
+    water_actual,
+    pump_kwh_per_m3,
+):
+    karbon = calc_scope12(
+        electricity_kwh_year,
+        natural_gas_m3_year,
+        grid_factor,
+        gas_factor,
+        carbon_price,
+    )
+
+    hvac = calc_hvac_savings_simple(
+        electricity_kwh_year,
+        delta_t,
+        energy_sensitivity,
+        beta,
+        grid_factor,
+        carbon_price,
+    )
+
+    su = calc_water_savings(
+        water_baseline,
+        water_actual,
+        pump_kwh_per_m3,
+        grid_factor,
+        carbon_price,
+    )
+
+    # toplam kazanç
+    toplam_kwh = hvac["saved_kwh"] + su["saved_pump_kwh"]
+    toplam_co2 = hvac["saved_co2_ton"] + su["saved_co2_ton"]
+    toplam_euro = hvac["saved_eur"] + su["saved_eur"]
+
+    return {
+        "engine_version": BIOL0T_ENGINE_VERSION,
+        "inputs": {
+            "electricity_kwh_year": electricity_kwh_year,
+            "natural_gas_m3_year": natural_gas_m3_year,
+            "area_m2": area_m2,
+            "carbon_price": carbon_price,
+            "grid_factor": grid_factor,
+            "gas_factor": gas_factor,
+            "delta_t": delta_t,
+            "energy_sensitivity": energy_sensitivity,
+            "beta": beta,
+            "water_baseline": water_baseline,
+            "water_actual": water_actual,
+            "pump_kwh_per_m3": pump_kwh_per_m3,
+        },
+        "carbon": karbon,
+        "hvac": hvac,
+        "water": su,
+        "total_operational_gain": {
+            "total_saved_kwh": toplam_kwh,
+            "total_saved_co2_ton": toplam_co2,
+            "total_saved_eur": toplam_euro,
+        },
     }
