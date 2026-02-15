@@ -3,6 +3,34 @@ import json
 from datetime import datetime, timezone
 import os
 import uuid
+AUDIT_LOG_DIR = "audit_logs"
+AUDIT_LOG_FILE = os.path.join(AUDIT_LOG_DIR, "runs.jsonl")
+
+def append_audit_log(run_id: str, engine_version: str, inputs: dict, outputs: dict) -> None:
+    os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+
+    record = {
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine_version": engine_version,
+        "inputs": inputs,
+        "summary": {
+            "scope1_ton": outputs.get("carbon", {}).get("scope1_ton"),
+            "scope2_ton": outputs.get("carbon", {}).get("scope2_ton"),
+            "total_ton": outputs.get("carbon", {}).get("total_ton"),
+            "total_saved_eur": outputs.get("total_operational_gain", {}).get("total_saved_eur"),
+        },
+    }
+
+    # JSON Lines format: her satır 1 JSON kayıt (append-only)
+    with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+def read_audit_log_text() -> str:
+    if not os.path.exists(AUDIT_LOG_FILE):
+        return ""
+    with open(AUDIT_LOG_FILE, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 st.set_page_config(page_title="BIOLOT", layout="wide")
