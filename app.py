@@ -21,4 +21,64 @@ electricity_kwh_year = st.sidebar.number_input(
     value=2500000.0
 )
 
-natural_gas_m3_year = st.sidebar.number_i
+natural_gas_m3_year = st.sidebar.number_input(
+    "Natural gas (m3/year)",
+    min_value=0.0,
+    value=180000.0
+)
+
+carbon_price = st.sidebar.number_input(
+    "Carbon price (EUR/ton)",
+    min_value=0.0,
+    value=85.5
+)
+
+area_m2 = st.sidebar.number_input(
+    "Factory area (m2)",
+    min_value=1.0,
+    value=20000.0
+)
+
+st.divider()
+st.subheader("Calculation")
+
+run = st.button("Calculate", type="primary")
+
+if run:
+    r = calc_scope12(
+        electricity_kwh_year=electricity_kwh_year,
+        natural_gas_m3_year=natural_gas_m3_year,
+        carbon_price_eur_per_ton=carbon_price,
+    )
+
+    scope1 = r["scope1_ton"]
+    scope2 = r["scope2_ton"]
+    total = r["total_ton"]
+    risk = r["risk_eur"]
+
+    # intensity metrics
+    if electricity_kwh_year > 0:
+        intensity_energy = total / (electricity_kwh_year / 1000000.0)  # t/GWh
+    else:
+        intensity_energy = 0.0
+
+    intensity_area = total / (area_m2 / 1000.0)  # t per 1000 m2
+
+    st.subheader("KPIs")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Scope 1 (tCO2/yr)", f"{scope1:.2f}")
+    c2.metric("Scope 2 (tCO2/yr)", f"{scope2:.2f}")
+    c3.metric("Total (tCO2/yr)", f"{total:.2f}")
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Carbon risk (EUR/yr)", f"{risk:.0f}")
+    c5.metric("Intensity (t/GWh)", f"{intensity_energy:.2f}")
+    c6.metric("Area intensity (t/1000m2)", f"{intensity_area:.2f}")
+
+    st.divider()
+    st.subheader("Raw result")
+    st.json(r)
+
+else:
+    st.info("Change values on the left and press Calculate.")
