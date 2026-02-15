@@ -181,7 +181,10 @@ if run:
             mime="application/json",
             use_container_width=True,
         )
-st.divider()
+
+else:
+    st.info("Parametreleri girin ve analizi başlatın.")
+    st.divider()
 st.subheader("Audit Log")
 
 log_text = read_audit_log_text()
@@ -197,5 +200,3 @@ if log_text:
 else:
     st.info("Henüz audit log kaydı yok. Analizi başlatınca oluşacak.")
 
-else:
-    st.info("Parametreleri girin ve analizi başlatın.")
