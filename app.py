@@ -25,4 +25,4 @@ delta_t = st.sidebar.number_input("Yeşil soğutma etkisi ΔT (°C)", min_value=
 energy_sens = st.sidebar.number_input("1°C başına enerji azalımı", min_value=0.0, value=0.04, step=0.005)
 beta = st.sidebar.number_input("Beta (bina elastikiyeti)", min_value=0.0, value=0.5, step=0.05)
 
-st.sidebar
+
