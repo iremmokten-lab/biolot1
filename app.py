@@ -35,6 +35,25 @@ if run:
         carbon_price_eur_per_ton=carbon_price,
     )
 
+    scope1 = r["scope1_ton"]
+    scope2 = r["scope2_ton"]
+    total = r["total_ton"]
+    risk = r["risk_eur"]
+
+    intensity_energy = total / (electricity_kwh_year / 1000000)
+    intensity_area = total / (area_m2 / 1000)
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Scope 1 (ton/year)", f"{scope1:.2f}")
+    c2.metric("Scope 2 (ton/year)", f"{scope2:.2f}")
+    c3.metric("Total CO2 (ton/year)", f"{total:.2f}")
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Carbon risk (EUR/year)", f"{risk:.0f}")
+    c5.metric("Emission intensity (t/GWh)", f"{intensity_energy:.2f}")
+    c6.metric("Area intensity (t/1000m2)", f"{intensity_area:.2f}")
+
+
    scope1 = r["scope1_ton"]
 scope2 = r["scope2_ton"]
 total = r["total_ton"]
