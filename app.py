@@ -13,17 +13,17 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
 # -------------------------------
-# MOTOR IMPORT
+# ENGINE IMPORT
 # -------------------------------
 try:
     from engine import run_biolot, BIOL0T_ENGINE_VERSION
 except Exception as e:
-    st.error("Engine import hatası")
+    st.error("Hesap motoru (engine) yüklenemedi.")
     st.code(str(e))
     st.stop()
 
 # -------------------------------
-# DEFAULT INPUTS
+# SABİT: Varsayılan tesis girdileri
 # -------------------------------
 DEFAULT_INPUTS = {
     "electricity_kwh_year": 2500000.0,
@@ -40,69 +40,205 @@ DEFAULT_INPUTS = {
     "pump_kwh_per_m3": 0.4,
 }
 
-if "facilities" not in st.session_state:
-    st.session_state["facilities"] = [{"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}]
-if "portfolio_result" not in st.session_state:
-    st.session_state["portfolio_result"] = None
+# -------------------------------
+# AUDIT LOG (Append-only)
+# -------------------------------
+AUDIT_LOG_DIR = "audit_logs"
+AUDIT_LOG_FILE = os.path.join(AUDIT_LOG_DIR, "runs.jsonl")
+
+def append_audit_log(run_id: str, facility_id: str, inputs: dict, outputs: dict) -> None:
+    os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+    record = {
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine_version": str(BIOL0T_ENGINE_VERSION),
+        "facility_id": facility_id,
+        "inputs": inputs,
+        "summary": {
+            "scope1_ton": outputs.get("carbon", {}).get("scope1_ton"),
+            "scope2_ton": outputs.get("carbon", {}).get("scope2_ton"),
+            "total_ton": outputs.get("carbon", {}).get("total_ton"),
+            "total_saved_eur": outputs.get("total_operational_gain", {}).get("total_saved_eur"),
+        },
+    }
+    with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+def read_audit_log_text() -> str:
+    if not os.path.exists(AUDIT_LOG_FILE):
+        return ""
+    with open(AUDIT_LOG_FILE, "r", encoding="utf-8") as f:
+        return f.read()
 
 # -------------------------------
-# PDF BUILDER (Grafiksiz Stabil)
+# PDF (Grafiksiz, Stabil)
 # -------------------------------
 def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
     styles = getSampleStyleSheet()
     story = []
 
-    story.append(Paragraph("BIOLOT – Portfolio Performance Report", styles["Title"]))
-    story.append(Spacer(1, 12))
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    story.append(Paragraph("BIOLOT – Portföy Raporu", styles["Title"]))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph(f"Oluşturulma: {now_utc}", styles["Normal"]))
+    story.append(Paragraph(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}", styles["Normal"]))
+    story.append(Spacer(1, 14))
 
     totals = portfolio["portfolio_totals"]
-
     kpi_data = [
-        ["Metric", "Value"],
-        ["Total Emissions (tCO2e/y)", f"{totals['total_ton']:.2f}"],
-        ["Scope 1 (t/y)", f"{totals['scope1_ton']:.2f}"],
-        ["Scope 2 (t/y)", f"{totals['scope2_ton']:.2f}"],
-        ["Total Energy Saved (kWh/y)", f"{totals['total_saved_kwh']:.0f}"],
-        ["Total Avoided Cost (€ / y)", f"{totals['total_saved_eur']:.2f}"],
+        ["Gösterge", "Değer"],
+        ["Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}"],
+        ["Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}"],
+        ["Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}"],
+        ["Toplam Enerji Tasarrufu (kWh/yıl)", f"{totals['total_saved_kwh']:.0f}"],
+        ["Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}"],
+        ["Toplam Önlenen CO2 (t/yıl)", f"{totals['total_saved_co2_ton']:.3f}"],
     ]
-
-    table = Table(kpi_data)
-    table.setStyle(TableStyle([
+    t = Table(kpi_data, hAlign="LEFT")
+    t.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
         ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("PADDING", (0,0), (-1,-1), 6),
     ]))
+    story.append(t)
+    story.append(Spacer(1, 16))
 
-    story.append(table)
-    story.append(Spacer(1, 20))
-
-    # Facility Table
+    story.append(Paragraph("Tesis Özeti (Tablo)", styles["Heading2"]))
     if len(df) > 0:
-        story.append(Paragraph("Facility Summary", styles["Heading2"]))
-        table_data = [df.columns.tolist()] + df.values.tolist()
-        table2 = Table(table_data)
-        table2.setStyle(TableStyle([
+        df_pdf = df.copy()
+        # PDF'yi çok büyütmemek için ilk 15 satır
+        df_pdf = df_pdf.head(15)
+        table_data = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
+        t2 = Table(table_data, hAlign="LEFT")
+        t2.setStyle(TableStyle([
             ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
             ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("PADDING", (0,0), (-1,-1), 6),
         ]))
-        story.append(table2)
+        story.append(t2)
+    else:
+        story.append(Paragraph("Tablo için veri yok.", styles["Normal"]))
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, title="BIOLOT Portföy Raporu")
     doc.build(story)
+    return buf.getvalue()
 
-    return buffer.getvalue()
+# -------------------------------
+# SESSION STATE
+# -------------------------------
+if "facilities" not in st.session_state:
+    st.session_state["facilities"] = [{"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}]
+
+if "portfolio_result" not in st.session_state:
+    st.session_state["portfolio_result"] = None
 
 # -------------------------------
 # UI
 # -------------------------------
 st.set_page_config(page_title="BIOLOT", layout="wide")
-st.title("BIOLOT – Portfolio Dashboard")
+st.title("BIOLOT – Portföy Dashboard")
+st.caption(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}")
 
 st.divider()
 
-if st.button("🚀 Tüm Tesisleri Çalıştır"):
+# -------------------------------
+# Tesis Yönetimi
+# -------------------------------
+st.subheader("Tesis Yönetimi")
+
+col1, col2 = st.columns([2, 1])
+with col1:
+    new_facility_id = st.text_input(
+        "Yeni Tesis ID",
+        value=f"FAC-{len(st.session_state['facilities'])+1:03d}"
+    )
+with col2:
+    if st.button("➕ Tesis Ekle", use_container_width=True):
+        ids = [f["facility_id"] for f in st.session_state["facilities"]]
+        if new_facility_id.strip() == "":
+            st.warning("Tesis ID boş olamaz.")
+        elif new_facility_id in ids:
+            st.warning("Bu tesis ID zaten var. Farklı bir ID yaz.")
+        else:
+            st.session_state["facilities"].append({"facility_id": new_facility_id, "inputs": dict(DEFAULT_INPUTS)})
+            st.session_state["portfolio_result"] = None
+            st.success(f"{new_facility_id} eklendi.")
+
+remove_options = ["(silme)"] + [f["facility_id"] for f in st.session_state["facilities"]]
+remove_id = st.selectbox("Silmek istediğin tesisi seç", remove_options)
+if st.button("🗑️ Seçili Tesisi Sil", disabled=(remove_id == "(silme)")):
+    st.session_state["facilities"] = [f for f in st.session_state["facilities"] if f["facility_id"] != remove_id]
+    st.session_state["portfolio_result"] = None
+    st.success(f"{remove_id} silindi.")
+
+st.divider()
+
+# -------------------------------
+# Tesis Girdileri (kayıp olan bölüm buydu)
+# -------------------------------
+st.subheader("Tesis Girdileri")
+
+if len(st.session_state["facilities"]) == 0:
+    st.warning("Hiç tesis yok. Üstten 'Tesis Ekle' ile en az 1 tesis ekle.")
+else:
+    for idx, fac in enumerate(st.session_state["facilities"]):
+        fid = fac["facility_id"]
+        inp = fac["inputs"]
+
+        with st.expander(f"🏭 {fid} – Girdileri Düzenle", expanded=(idx == 0)):
+            a, b, c = st.columns(3)
+
+            with a:
+                inp["electricity_kwh_year"] = st.number_input("Yıllık Elektrik (kWh)", min_value=0.0, value=float(inp["electricity_kwh_year"]), key=f"{fid}_el")
+                inp["natural_gas_m3_year"] = st.number_input("Yıllık Doğalgaz (m³)", min_value=0.0, value=float(inp["natural_gas_m3_year"]), key=f"{fid}_gas")
+                inp["area_m2"] = st.number_input("Toplam Alan (m²)", min_value=1.0, value=float(inp["area_m2"]), key=f"{fid}_area")
+
+            with b:
+                inp["carbon_price"] = st.number_input("Karbon Fiyatı (€/ton)", min_value=0.0, value=float(inp["carbon_price"]), key=f"{fid}_cp")
+                inp["grid_factor"] = st.number_input("Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=float(inp["grid_factor"]), key=f"{fid}_gf")
+                inp["gas_factor"] = st.number_input("Gaz Emisyon Faktörü (kgCO2/m³)", min_value=0.0, value=float(inp["gas_factor"]), key=f"{fid}_gaf")
+
+            with c:
+                inp["delta_t"] = st.number_input("Mikroklima Etkisi (°C)", min_value=0.0, value=float(inp["delta_t"]), key=f"{fid}_dt")
+                inp["energy_sensitivity"] = st.number_input("1°C Başına Enerji Azalış Oranı", min_value=0.0, value=float(inp["energy_sensitivity"]), key=f"{fid}_es")
+                inp["beta"] = st.number_input("Bina Elastikiyet Katsayısı", min_value=0.0, value=float(inp["beta"]), key=f"{fid}_beta")
+
+            st.markdown("**Su / Pompa**")
+            w1, w2, w3 = st.columns(3)
+            with w1:
+                inp["water_baseline"] = st.number_input("Referans Su (m³/yıl)", min_value=0.0, value=float(inp["water_baseline"]), key=f"{fid}_wb")
+            with w2:
+                inp["water_actual"] = st.number_input("Mevcut Su (m³/yıl)", min_value=0.0, value=float(inp["water_actual"]), key=f"{fid}_wa")
+            with w3:
+                inp["pump_kwh_per_m3"] = st.number_input("Pompa Enerji İndeksi (kWh/m³)", min_value=0.0, value=float(inp["pump_kwh_per_m3"]), key=f"{fid}_pk")
+
+            fac["inputs"] = inp
+
+st.divider()
+
+# -------------------------------
+# Portföy Analizi
+# -------------------------------
+st.subheader("Portföy Analizi")
+
+run_all = st.button("🚀 Tüm Tesisleri Çalıştır", type="primary")
+
+if run_all:
+    if len(st.session_state["facilities"]) == 0:
+        st.error("Çalıştırmak için en az 1 tesis eklemelisin.")
+        st.stop()
 
     portfolio = {
+        "meta": {
+            "portfolio_id": "BIOLOT-PORTFOLIO",
+            "engine_version": str(BIOL0T_ENGINE_VERSION),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "facility_count": len(st.session_state["facilities"]),
+        },
+        "facilities": [],
         "portfolio_totals": {
             "scope1_ton": 0.0,
             "scope2_ton": 0.0,
@@ -111,77 +247,117 @@ if st.button("🚀 Tüm Tesisleri Çalıştır"):
             "total_saved_co2_ton": 0.0,
             "total_saved_eur": 0.0,
         },
-        "facilities": []
     }
 
     for fac in st.session_state["facilities"]:
         fid = fac["facility_id"]
         inp = fac["inputs"]
+
         out = run_biolot(**inp)
 
-        portfolio["facilities"].append({
-            "facility_id": fid,
-            "outputs": out
-        })
+        run_id = str(uuid.uuid4())
+        append_audit_log(run_id, facility_id=fid, inputs=inp, outputs=out)
 
-        c = out["carbon"]
-        t = out["total_operational_gain"]
+        portfolio["facilities"].append({"facility_id": fid, "run_id": run_id, "inputs": inp, "outputs": out})
 
-        portfolio["portfolio_totals"]["scope1_ton"] += c["scope1_ton"]
-        portfolio["portfolio_totals"]["scope2_ton"] += c["scope2_ton"]
-        portfolio["portfolio_totals"]["total_ton"] += c["total_ton"]
-        portfolio["portfolio_totals"]["total_saved_kwh"] += t["total_saved_kwh"]
-        portfolio["portfolio_totals"]["total_saved_co2_ton"] += t["total_saved_co2_ton"]
-        portfolio["portfolio_totals"]["total_saved_eur"] += t["total_saved_eur"]
+        c = out.get("carbon", {})
+        t = out.get("total_operational_gain", {})
+
+        portfolio["portfolio_totals"]["scope1_ton"] += float(c.get("scope1_ton", 0.0))
+        portfolio["portfolio_totals"]["scope2_ton"] += float(c.get("scope2_ton", 0.0))
+        portfolio["portfolio_totals"]["total_ton"] += float(c.get("total_ton", 0.0))
+        portfolio["portfolio_totals"]["total_saved_kwh"] += float(t.get("total_saved_kwh", 0.0))
+        portfolio["portfolio_totals"]["total_saved_co2_ton"] += float(t.get("total_saved_co2_ton", 0.0))
+        portfolio["portfolio_totals"]["total_saved_eur"] += float(t.get("total_saved_eur", 0.0))
 
     st.session_state["portfolio_result"] = portfolio
-    st.success("Portfolio analizi tamamlandı.")
+    st.success("Portföy analizi tamamlandı.")
 
+# -------------------------------
+# Dashboard
+# -------------------------------
 portfolio = st.session_state.get("portfolio_result")
 
 if portfolio:
-
     totals = portfolio["portfolio_totals"]
 
-    st.subheader("Portfolio KPI")
-    st.metric("Toplam Emisyon (tCO2e)", f"{totals['total_ton']:.2f}")
-    st.metric("Toplam Kaçınılan Maliyet (€)", f"{totals['total_saved_eur']:.2f}")
+    st.subheader("Portföy KPI")
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}")
+    k2.metric("Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}")
+    k3.metric("Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}")
+    k4.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}")
 
     rows = []
     for f in portfolio["facilities"]:
         fid = f["facility_id"]
-        c = f["outputs"]["carbon"]
-        t = f["outputs"]["total_operational_gain"]
+        out = f["outputs"]
+        carbon = out.get("carbon", {})
+        gain = out.get("total_operational_gain", {})
         rows.append({
-            "facility_id": fid,
-            "total_ton": c["total_ton"],
-            "saved_eur": t["total_saved_eur"],
-            "saved_kwh": t["total_saved_kwh"],
+            "tesis_id": fid,
+            "toplam_emisyon_ton": float(carbon.get("total_ton", 0.0)),
+            "scope1_ton": float(carbon.get("scope1_ton", 0.0)),
+            "scope2_ton": float(carbon.get("scope2_ton", 0.0)),
+            "tasarruf_eur": float(gain.get("total_saved_eur", 0.0)),
+            "tasarruf_kwh": float(gain.get("total_saved_kwh", 0.0)),
         })
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows).sort_values("toplam_emisyon_ton", ascending=False)
 
     st.divider()
     st.subheader("Tesis Tablosu")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Grafikler")
 
-    if len(df) > 0:
-        df2 = df.set_index("facility_id")
-        st.bar_chart(df2[["total_ton"]])
-        st.bar_chart(df2[["saved_eur"]])
-        st.bar_chart(df2[["saved_kwh"]])
+    df_chart = df.set_index("tesis_id")
+    st.bar_chart(df_chart[["scope1_ton", "scope2_ton", "toplam_emisyon_ton"]], use_container_width=True)
+    st.bar_chart(df_chart[["tasarruf_eur"]], use_container_width=True)
+    st.bar_chart(df_chart[["tasarruf_kwh"]], use_container_width=True)
 
     st.divider()
-    st.subheader("PDF Export")
+    st.subheader("PDF Export (Yatırımcı Raporu)")
 
     pdf_bytes = build_portfolio_pdf_bytes(portfolio, df)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     st.download_button(
-        "⬇️ PDF Raporunu indir",
+        "⬇️ PDF Raporunu İndir",
         data=pdf_bytes,
-        file_name="biolot_portfolio_report.pdf",
+        file_name=f"biolot_portfoy_raporu_v{BIOL0T_ENGINE_VERSION}_{ts}.pdf",
         mime="application/pdf",
         use_container_width=True,
     )
+
+    st.divider()
+    st.subheader("Denetlenebilir Çıktılar")
+
+    with st.expander("Portföy JSON (indirilebilir)"):
+        json_text = json.dumps(portfolio, ensure_ascii=False, indent=2, sort_keys=True)
+        st.download_button(
+            "⬇️ Portföy JSON'u indir",
+            data=json_text.encode("utf-8"),
+            file_name=f"biolot_portfoy_v{BIOL0T_ENGINE_VERSION}_{ts}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        st.json(portfolio)
+
+    st.divider()
+    st.subheader("Audit Log")
+
+    log_text = read_audit_log_text()
+    if log_text:
+        st.download_button(
+            "⬇️ Audit log dosyasını indir (runs.jsonl)",
+            data=log_text.encode("utf-8"),
+            file_name="runs.jsonl",
+            mime="application/jsonl",
+            use_container_width=True,
+        )
+    else:
+        st.info("Henüz audit log yok. Portföy çalıştırınca oluşur.")
+else:
+    st.info("Üstten tesis ekleyip girdileri düzenledikten sonra 'Tüm Tesisleri Çalıştır' butonuna bas.")
