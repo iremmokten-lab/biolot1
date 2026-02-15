@@ -79,20 +79,9 @@ pump_kwh_per_m3 = st.sidebar.number_input("Pompa Enerji İndeksi (kWh/m3)", min_
 # -------------------------------
 st.divider()
 st.subheader("Analiz Sonuçları")
-    if electricity_kwh_year < 0 or natural_gas_m3_year < 0:
-        st.error("Enerji değerleri negatif olamaz.")
-        st.stop()
 
-    if area_m2 <= 0:
-        st.error("Alan 0 veya negatif olamaz.")
-        st.stop()
-
-    if water_actual > water_baseline:
-        st.warning("Mevcut su tüketimi referansın üzerinde görünüyor.")
-
-run = st.button("Analizi Başlat", type="primary")
-  
-if run:
+   run = st.button("Analizi Başlat", type="primary")
+  if run:
     out = run_biolot(
         electricity_kwh_year=electricity_kwh_year,
         natural_gas_m3_year=natural_gas_m3_year,
