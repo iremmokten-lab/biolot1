@@ -16,6 +16,12 @@ st.sidebar.header("Inputs")
 electricity_kwh_year = st.sidebar.number_input("Electricity (kWh/year)", min_value=0.0, value=2500000.0)
 natural_gas_m3_year = st.sidebar.number_input("Natural gas (m3/year)", min_value=0.0, value=180000.0)
 carbon_price = st.sidebar.number_input("Carbon price (EUR/ton)", min_value=0.0, value=85.5)
+area_m2 = st.sidebar.number_input(
+    "Factory area (m2)",
+    min_value=1.0,
+    value=20000.0
+)
+
 
 st.divider()
 st.subheader("Calculation")
