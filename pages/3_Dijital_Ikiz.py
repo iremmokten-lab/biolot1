@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from statistics import mean
 
 import streamlit as st
 
@@ -17,35 +16,54 @@ import plotly.graph_objects as go
 from engine import run_biolot
 
 
+# -------------------------
+# Sayfa ayarı
+# -------------------------
 st.set_page_config(page_title="BIOLOT | Dijital İkiz", layout="wide")
-st.title("Dijital İkiz — Harita Modu / Tesis Planı Modu")
+st.title("Dijital İkiz (2D) — Zonlar • Sensörler • Katmanlar")
 st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu görseli üstü) aynı sayfada. Haritayı kaybetmiyoruz.")
 
 DATA_DIR = Path("data")
 ZONES_PATH = DATA_DIR / "zones.json"
 SENSORS_PATH = DATA_DIR / "sensors.json"
-PLAN_IMG_PATH_PNG = Path("assets/site_plan.png")
-PLAN_IMG_PATH_JPG = Path("assets/site_plan.jpg")
+
+PLAN_IMG_PNG = Path("assets/site_plan.png")
+PLAN_IMG_JPG = Path("assets/site_plan.jpg")
 
 
+# -------------------------
+# Helpers
+# -------------------------
 def load_json(path: Path):
     if not path.exists():
-        return None, f"Dosya bulunamadı: {path.as_posix()}"
+        st.error(f"Dosya bulunamadı: {path.as_posix()}")
+        st.stop()
     try:
-        return json.loads(path.read_text(encoding="utf-8")), None
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        return None, f"JSON okunamadı ({path.as_posix()}): {e}"
+        st.error(f"JSON okunamadı ({path.as_posix()}): {e}")
+        st.stop()
 
 
-zones_data, z_err = load_json(ZONES_PATH)
-sensors_data, s_err = load_json(SENSORS_PATH)
+def centroid_latlon(poly):
+    lats = [p[0] for p in poly]
+    lons = [p[1] for p in poly]
+    return (sum(lats) / len(lats), sum(lons) / len(lons))
 
-if z_err:
-    st.error(z_err)
-    st.stop()
-if s_err:
-    st.error(s_err)
-    st.stop()
+
+def load_plan_image_path():
+    if PLAN_IMG_PNG.exists():
+        return PLAN_IMG_PNG.as_posix()
+    if PLAN_IMG_JPG.exists():
+        return PLAN_IMG_JPG.as_posix()
+    return None
+
+
+# -------------------------
+# Data load
+# -------------------------
+zones_data = load_json(ZONES_PATH)
+sensors_data = load_json(SENSORS_PATH)
 
 zones = zones_data.get("zones", [])
 sensors = sensors_data.get("sensors", [])
@@ -54,10 +72,11 @@ if not zones:
     st.error("zones.json içinde 'zones' listesi boş.")
     st.stop()
 
+
 # -------------------------
-# Sidebar
+# Sidebar UI
 # -------------------------
-st.sidebar.header("Görünüm")
+st.sidebar.header("Mod")
 view_mode = st.sidebar.radio("Mod seç", ["Harita Modu", "Tesis Planı Modu"], index=0)
 
 st.sidebar.divider()
@@ -89,8 +108,9 @@ zone_names = [z["name"] for z in zones]
 selected_zone_name = st.sidebar.selectbox("Zon seç", zone_names, index=0)
 selected_zone = next(z for z in zones if z["name"] == selected_zone_name)
 
+
 # -------------------------
-# BIOLOT motor çıktısı
+# Engine output + zone KPI
 # -------------------------
 total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones)
 if total_area_m2 <= 0:
@@ -138,8 +158,9 @@ elif zone_kpi["risk_eur"] > 20000:
 else:
     risk_flag = "DÜŞÜK"
 
+
 # -------------------------
-# Right panel (ortak)
+# Right panel
 # -------------------------
 def render_right_panel():
     st.subheader("Zon Özeti")
@@ -150,6 +171,7 @@ def render_right_panel():
 
     st.divider()
     st.subheader("Zon KPI (BIOLOT)")
+
     a1, a2 = st.columns(2)
     a1.metric("Zon Toplam CO2 (t/yıl)", f"{zone_kpi['total_ton']:.2f}")
     a2.metric("Zon Karbon Riski (€)", f"{zone_kpi['risk_eur']:.0f}")
@@ -170,15 +192,10 @@ def render_right_panel():
     with st.expander("Denetlenebilir çıktı (motor JSON)"):
         st.json(out)
 
-# -------------------------
-# Harita Modu
-# -------------------------
-def centroid_latlon(poly):
-    lats = [p[0] for p in poly]
-    lons = [p[1] for p in poly]
-    return (sum(lats) / len(lats), sum(lons) / len(lons))
 
-
+# -------------------------
+# Harita modu
+# -------------------------
 def render_map_mode():
     center_lat, center_lon = centroid_latlon(selected_zone["polygon"])
     m = folium.Map(location=[center_lat, center_lon], zoom_start=17, control_scale=True)
@@ -187,9 +204,10 @@ def render_map_mode():
         zones_fg = folium.FeatureGroup(name="Zonlar", show=True)
         for z in zones:
             poly = z["polygon"]
-            color = z.get("style", {}).get("color", "#2E7D32")
-            fill_color = z.get("style", {}).get("fillColor", "#66BB6A")
-            fill_opacity = z.get("style", {}).get("fillOpacity", 0.25)
+            style = z.get("style", {})
+            color = style.get("color", "#2E7D32")
+            fill_color = style.get("fillColor", "#66BB6A")
+            fill_opacity = style.get("fillOpacity", 0.25)
 
             tooltip = f"{z['name']} | Alan: {z.get('area_m2','-')} m²"
             popup = folium.Popup(
@@ -209,15 +227,13 @@ def render_map_mode():
                 tooltip=tooltip,
                 popup=popup,
             ).add_to(zones_fg)
+
         zones_fg.add_to(m)
 
     if show_sensors:
         sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
         for s in sensors:
             lat, lon = s["lat"], s["lon"]
-            last = s.get("last", {})
-            temp = last.get("temp_c", None)
-
             folium.CircleMarker(
                 location=[lat, lon],
                 radius=6,
@@ -244,20 +260,12 @@ def render_map_mode():
     folium.LayerControl(collapsed=False).add_to(m)
     st_folium(m, height=620, width=None)
 
-# -------------------------
-# Tesis Planı Modu
-# -------------------------
-def load_plan_image():
-    if PLAN_IMG_PATH_PNG.exists():
-        return PLAN_IMG_PATH_PNG.as_posix()
-    if PLAN_IMG_PATH_JPG.exists():
-        return PLAN_IMG_PATH_JPG.as_posix()
-    return None
 
-
+# -------------------------
+# Plan modu (GÜVENLİ - görsel kaybolmaz)
+# -------------------------
 def render_plan_mode():
-   def render_plan_mode():
-    img_path = load_plan_image()
+    img_path = load_plan_image_path()
     if not img_path:
         st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
         st.stop()
@@ -265,68 +273,32 @@ def render_plan_mode():
     img = Image.open(img_path)
     width, height = img.size
 
-    # --- 1) JSON'daki koordinatlar farklı bir görsel boyutuna göre girilmiş olabilir.
-    # Bu durumda otomatik ölçekleyeceğiz.
-    def get_max_xy_from_data():
-        max_x, max_y = 0, 0
-
-        for z in zones:
-            poly_px = z.get("polygon_px")
-            if poly_px:
-                for x, y in poly_px:
-                    max_x = max(max_x, float(x))
-                    max_y = max(max_y, float(y))
-
-        for s in sensors:
-            if "x" in s and "y" in s:
-                max_x = max(max_x, float(s["x"]))
-                max_y = max(max_y, float(s["y"]))
-
-        return max_x, max_y
-
-    data_max_x, data_max_y = get_max_xy_from_data()
-
-    # Base boyut: JSON'daki max değerler, görselden büyükse onları referans al.
-    base_w = max(width, int(data_max_x)) if data_max_x > 0 else width
-    base_h = max(height, int(data_max_y)) if data_max_y > 0 else height
-
-    scale_x = width / base_w
-    scale_y = height / base_h
-
-    def sx(x): return float(x) * scale_x
-    def sy(y): return float(y) * scale_y
-
     fig = go.Figure()
 
-    # --- 2) Arka plan görseli
-    # Piksel mantığı için y eksenini ters çevireceğiz (0 üstte olsun).
+    # ✅ Arka plan (SENDE ÇALIŞAN yöntem)
     fig.add_layout_image(
         dict(
             source=img,
             xref="x",
             yref="y",
             x=0,
-            y=0,
+            y=height,
             sizex=width,
             sizey=height,
             sizing="stretch",
             layer="below",
-            xanchor="left",
-            yanchor="top",
         )
     )
 
-    # --- 3) Zon overlay
+    # Zonlar
     if show_zones:
         for z in zones:
-            poly_px = z.get("polygon_px")
-
-            # polygon_px yoksa demo fallback
+            poly_px = z.get("polygon_px", None)
             if not poly_px:
-                poly_px = [[50, 50], [350, 50], [350, 250], [50, 250]]
+                continue  # polygon_px yoksa plan modunda çizme
 
-            xs = [sx(p[0]) for p in poly_px] + [sx(poly_px[0][0])]
-            ys = [sy(p[1]) for p in poly_px] + [sy(poly_px[0][1])]
+            xs = [p[0] for p in poly_px] + [poly_px[0][0]]
+            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
 
             fig.add_trace(
                 go.Scatter(
@@ -338,19 +310,14 @@ def render_plan_mode():
                 )
             )
 
-    # --- 4) Sensör overlay
+    # Sensörler
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
-                xs.append(sx(s["x"]))
-                ys.append(sy(s["y"]))
+                xs.append(float(s["x"]))
+                ys.append(float(s["y"]))
                 names.append(s["name"])
-
-        if not xs:
-            xs = [width * 0.35, width * 0.55, width * 0.70]
-            ys = [height * 0.55, height * 0.40, height * 0.65]
-            names = ["Sensör (demo)", "Sensör (demo)", "Sensör (demo)"]
 
         fig.add_trace(
             go.Scatter(
@@ -364,12 +331,9 @@ def render_plan_mode():
             )
         )
 
-    # --- 5) Eksen ayarları (kritik)
-    # y eksenini ters çeviriyoruz: (0,0) artık sol-üst piksel gibi davranır.
-    fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
-    fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
+    fig.update_xaxes(visible=False, range=[0, width])
+    fig.update_yaxes(visible=False, range=[0, height], scaleanchor="x")
 
-    # Legend üstte kaplamasın diye alta alalım
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=0),
         height=650,
@@ -378,32 +342,14 @@ def render_plan_mode():
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.caption(
-        f"Plan kalibrasyon: görüntü {width}x{height}px | veri max {int(data_max_x)}x{int(data_max_y)}px | "
-        f"ölçek: x={scale_x:.3f}, y={scale_y:.3f}"
-    )
-
-    # Heatmap: plotly ile basit yoğunluk (temp varsa ağırlık gibi)
-    # (Opsiyonel: şimdilik sadece marker üstü kalabilir. İstersen sonraki adımda ekleriz.)
-
-    fig.update_xaxes(visible=False, range=[0, width])
-    fig.update_yaxes(visible=False, range=[0, height], scaleanchor="x")
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=650)
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.info(
-        "Plan modunda doğru çizim için zones.json'a her zona 'polygon_px', sensors.json'a sensörlere 'x' ve 'y' ekleyeceğiz. "
-        "Şimdilik demo overlay gösteriyorum."
-    )
 
 # -------------------------
-# Page layout
+# Layout
 # -------------------------
 left, right = st.columns([2, 1], gap="large")
 
 with left:
-    st.subheader("Görünüm")
+    st.subheader("Harita")
     if view_mode == "Harita Modu":
         render_map_mode()
     else:
