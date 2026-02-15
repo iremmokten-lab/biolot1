@@ -1,4 +1,5 @@
 import json
+import base64
 from pathlib import Path
 
 import streamlit as st
@@ -53,9 +54,18 @@ def load_plan_image_path():
     return None
 
 
+def image_to_data_uri(img_path: str) -> str:
+    # Plotly için base64 data URI
+    p = Path(img_path)
+    b = p.read_bytes()
+    ext = p.suffix.lower().replace(".", "")
+    if ext == "jpg":
+        ext = "jpeg"
+    return f"data:image/{ext};base64," + base64.b64encode(b).decode("utf-8")
+
+
 zones_data = load_json(ZONES_PATH)
 sensors_data = load_json(SENSORS_PATH)
-
 zones = zones_data.get("zones", [])
 sensors = sensors_data.get("sensors", [])
 
@@ -186,7 +196,6 @@ def render_map_mode():
             color = style.get("color", "#2E7D32")
             fill_color = style.get("fillColor", "#66BB6A")
             fill_opacity = style.get("fillOpacity", 0.25)
-
             folium.Polygon(
                 locations=poly,
                 color=color,
@@ -228,7 +237,6 @@ def render_map_mode():
 
 
 def render_plan_mode():
-    # ✅ Görseli Streamlit ile bas: garanti görünür
     img_path = load_plan_image_path()
     if not img_path:
         st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
@@ -236,12 +244,27 @@ def render_plan_mode():
 
     img = Image.open(img_path)
     width, height = img.size
+    img_uri = image_to_data_uri(img_path)
 
-    st.image(img, caption="Tesis Planı (görsel)", use_container_width=True)
-
-    # ✅ Üstüne overlay çizimi: şeffaf plotly
     fig = go.Figure()
 
+    # ✅ Görseli tek grafiğe göm (overlay kesin çalışır)
+    fig.add_layout_image(
+        dict(
+            source=img_uri,
+            xref="x",
+            yref="y",
+            x=0,
+            y=0,
+            sizex=width,
+            sizey=height,
+            sizing="stretch",
+            layer="below",
+            opacity=1.0,
+        )
+    )
+
+    # ✅ Zonlar
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px")
@@ -251,6 +274,7 @@ def render_plan_mode():
             ys = [p[1] for p in poly_px] + [poly_px[0][1]]
             fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=z["name"], line=dict(width=3)))
 
+    # ✅ Sensörler
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
@@ -270,15 +294,13 @@ def render_plan_mode():
             )
         )
 
-    # ✅ Piksel mantığı: (0,0) sol-üst
+    # ✅ Piksel ekseni: (0,0) sol-üst
     fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
     fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
 
     fig.update_layout(
         height=650,
         margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
 
