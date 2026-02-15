@@ -256,6 +256,7 @@ def load_plan_image():
 
 
 def render_plan_mode():
+   def render_plan_mode():
     img_path = load_plan_image()
     if not img_path:
         st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
@@ -264,35 +265,68 @@ def render_plan_mode():
     img = Image.open(img_path)
     width, height = img.size
 
+    # --- 1) JSON'daki koordinatlar farklı bir görsel boyutuna göre girilmiş olabilir.
+    # Bu durumda otomatik ölçekleyeceğiz.
+    def get_max_xy_from_data():
+        max_x, max_y = 0, 0
+
+        for z in zones:
+            poly_px = z.get("polygon_px")
+            if poly_px:
+                for x, y in poly_px:
+                    max_x = max(max_x, float(x))
+                    max_y = max(max_y, float(y))
+
+        for s in sensors:
+            if "x" in s and "y" in s:
+                max_x = max(max_x, float(s["x"]))
+                max_y = max(max_y, float(s["y"]))
+
+        return max_x, max_y
+
+    data_max_x, data_max_y = get_max_xy_from_data()
+
+    # Base boyut: JSON'daki max değerler, görselden büyükse onları referans al.
+    base_w = max(width, int(data_max_x)) if data_max_x > 0 else width
+    base_h = max(height, int(data_max_y)) if data_max_y > 0 else height
+
+    scale_x = width / base_w
+    scale_y = height / base_h
+
+    def sx(x): return float(x) * scale_x
+    def sy(y): return float(y) * scale_y
+
     fig = go.Figure()
 
-    # arka plan görsel
+    # --- 2) Arka plan görseli
+    # Piksel mantığı için y eksenini ters çevireceğiz (0 üstte olsun).
     fig.add_layout_image(
         dict(
             source=img,
             xref="x",
             yref="y",
             x=0,
-            y=height,
+            y=0,
             sizex=width,
             sizey=height,
             sizing="stretch",
             layer="below",
+            xanchor="left",
+            yanchor="top",
         )
     )
 
-    # Zon overlay: zones.json içinde polygon_px varsa onu kullan
-    # yoksa demo olarak basit kutular çizer (sen düzeltince gerçek olur)
+    # --- 3) Zon overlay
     if show_zones:
         for z in zones:
-            poly_px = z.get("polygon_px", None)
+            poly_px = z.get("polygon_px")
 
+            # polygon_px yoksa demo fallback
             if not poly_px:
-                # Demo fallback (görselde bir şey gözüksün diye)
-                poly_px = [[50, height-50], [350, height-50], [350, height-250], [50, height-250]]
+                poly_px = [[50, 50], [350, 50], [350, 250], [50, 250]]
 
-            xs = [p[0] for p in poly_px] + [poly_px[0][0]]
-            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
+            xs = [sx(p[0]) for p in poly_px] + [sx(poly_px[0][0])]
+            ys = [sy(p[1]) for p in poly_px] + [sy(poly_px[0][1])]
 
             fig.add_trace(
                 go.Scatter(
@@ -304,16 +338,15 @@ def render_plan_mode():
                 )
             )
 
-    # Sensör overlay: sensors.json içinde x,y varsa onu kullan
+    # --- 4) Sensör overlay
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
-                xs.append(float(s["x"]))
-                ys.append(float(s["y"]))
+                xs.append(sx(s["x"]))
+                ys.append(sy(s["y"]))
                 names.append(s["name"])
 
-        # fallback demo sensor
         if not xs:
             xs = [width * 0.35, width * 0.55, width * 0.70]
             ys = [height * 0.55, height * 0.40, height * 0.65]
@@ -330,6 +363,25 @@ def render_plan_mode():
                 name="Sensörler",
             )
         )
+
+    # --- 5) Eksen ayarları (kritik)
+    # y eksenini ters çeviriyoruz: (0,0) artık sol-üst piksel gibi davranır.
+    fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
+    fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
+
+    # Legend üstte kaplamasın diye alta alalım
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=0),
+        height=650,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption(
+        f"Plan kalibrasyon: görüntü {width}x{height}px | veri max {int(data_max_x)}x{int(data_max_y)}px | "
+        f"ölçek: x={scale_x:.3f}, y={scale_y:.3f}"
+    )
 
     # Heatmap: plotly ile basit yoğunluk (temp varsa ağırlık gibi)
     # (Opsiyonel: şimdilik sadece marker üstü kalabilir. İstersen sonraki adımda ekleriz.)
