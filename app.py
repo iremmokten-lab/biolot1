@@ -5,7 +5,10 @@ st.title("BIOLOT – Endüstriyel Çevresel Performans Platformu")
 
 # ---- motor import
 try:
-    from engine import calc_scope12, calc_hvac_savings_simple, calc_water_savings
+    from engine.carbon import calc_scope12
+from engine.hvac import calc_hvac_savings_simple
+from engine.water import calc_water_savings
+
 except Exception as e:
     st.error("Hesap motoru yüklenemedi.")
     st.code(str(e))
