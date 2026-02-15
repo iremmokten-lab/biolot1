@@ -4,8 +4,8 @@ st.set_page_config(page_title="BIOLOT Demo", layout="wide")
 st.title("BIOLOT - Web Demo")
 
 # ---- import engine
-try:from engine import calc_scope12, calc_hvac_savings_simple
-
+try:
+    from engine import calc_scope12, calc_hvac_savings_simple
     st.success("engine import OK")
 except Exception as e:
     st.error("engine import FAILED")
@@ -39,12 +39,34 @@ area_m2 = st.sidebar.number_input(
     value=20000.0
 )
 
+st.sidebar.divider()
+st.sidebar.subheader("HVAC / Microclimate")
+
+delta_t = st.sidebar.number_input(
+    "Cooling effect delta T (C)",
+    min_value=0.0,
+    value=2.4
+)
+
+energy_sensitivity = st.sidebar.number_input(
+    "Energy sensitivity per C (0.04 = 4%)",
+    min_value=0.0,
+    value=0.04
+)
+
+beta = st.sidebar.number_input(
+    "Building elasticity beta",
+    min_value=0.0,
+    value=0.5
+)
+
 st.divider()
 st.subheader("Calculation")
 
 run = st.button("Calculate", type="primary")
 
 if run:
+    # --- carbon
     r = calc_scope12(
         electricity_kwh_year=electricity_kwh_year,
         natural_gas_m3_year=natural_gas_m3_year,
@@ -56,7 +78,7 @@ if run:
     total = r["total_ton"]
     risk = r["risk_eur"]
 
-    # intensity metrics
+    # --- intensity metrics
     if electricity_kwh_year > 0:
         intensity_energy = total / (electricity_kwh_year / 1000000.0)  # t/GWh
     else:
@@ -64,7 +86,7 @@ if run:
 
     intensity_area = total / (area_m2 / 1000.0)  # t per 1000 m2
 
-    st.subheader("KPIs")
+    st.subheader("Carbon KPIs")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Scope 1 (tCO2/yr)", f"{scope1:.2f}")
@@ -76,9 +98,27 @@ if run:
     c5.metric("Intensity (t/GWh)", f"{intensity_energy:.2f}")
     c6.metric("Area intensity (t/1000m2)", f"{intensity_area:.2f}")
 
+    # --- hvac
+    hvac = calc_hvac_savings_simple(
+        electricity_kwh_year=electricity_kwh_year,
+        delta_t_c=delta_t,
+        energy_sensitivity_per_c=energy_sensitivity,
+        beta=beta,
+    )
+
     st.divider()
-    st.subheader("Raw result")
-    st.json(r)
+    st.subheader("HVAC Impact")
+
+    h1, h2, h3 = st.columns(3)
+    h1.metric("HVAC saving (kWh/yr)", f"{hvac['saved_kwh']:.0f}")
+    h2.metric("Avoided CO2 (ton/yr)", f"{hvac['saved_co2_ton']:.2f}")
+    h3.metric("Avoided cost (EUR/yr)", f"{hvac['saved_eur']:.0f}")
+
+    st.divider()
+    st.subheader("Raw results")
+    colA, colB = st.columns(2)
+    colA.json(r)
+    colB.json(hvac)
 
 else:
     st.info("Change values on the left and press Calculate.")
