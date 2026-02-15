@@ -1,4 +1,17 @@
 import streamlit as st
+
+st.set_page_config(page_title="BIOLOT Demo", layout="wide")
+st.title("BIOLOT — Web Demo")
+
+try:
+    from engine import calc_scope12, calc_hvac_savings_simple, calc_water_savings
+    st.success("engine.py başarıyla import edildi ✅")
+except Exception as e:
+    st.error("engine.py import edilemedi ❌")
+    st.code(str(e))
+    st.stop()
+
+import streamlit as st
 from engine import calc_scope12, calc_hvac_savings_simple, calc_water_savings
 
 st.set_page_config(page_title="BIOLOT Demo", layout="wide")
