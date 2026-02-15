@@ -81,6 +81,16 @@ st.divider()
 st.subheader("Analiz Sonuçları")
 
 run = st.button("Analizi Başlat", type="primary")
+    if electricity_kwh_year < 0 or natural_gas_m3_year < 0:
+        st.error("Enerji değerleri negatif olamaz.")
+        st.stop()
+
+    if area_m2 <= 0:
+        st.error("Alan 0 veya negatif olamaz.")
+        st.stop()
+
+    if water_actual > water_baseline:
+        st.warning("Mevcut su tüketimi referansın üzerinde görünüyor.")
 
 if run:
     out = run_biolot(
