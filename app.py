@@ -27,4 +27,7 @@ st.sidebar.divider()
 # --- Su / Pompa ---
 st.sidebar.subheader("Su / Pompa")
 water_baseline = st.sidebar.number_input("Baseline su (m³/yıl)", min_value=0.0, value=12000.0, step=500.0)
-water_actual = st.sidebar.number_input("Actual su (m³/
+water_actual = st.sidebar.number_input(
+    "Actual su (m³/yıl)", min_value=0.0, value=8000.0, step=500.0
+)
+
