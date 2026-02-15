@@ -1,9 +1,7 @@
-import streamlit as st
-
-st.set_page_config(page_title="BIOLOT Çevresel Performans Platformu", layout="wide")
-st.title("BIOLOT – Endüstriyel Çevresel Performans Platformu")
-
-# ---- motor import
+File "/mount/src/biolot1/app.py", line 9
+  from engine.hvac import calc_hvac_savings_simple
+  ^
+SyntaxError: expected 'except' or 'finally' block
 try:
     from engine.carbon import calc_scope12
 from engine.hvac import calc_hvac_savings_simple
