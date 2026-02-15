@@ -301,7 +301,18 @@ if portfolio:
 
     left, right = st.columns([2, 1])
     with right:
-        top_n = st.slider("Grafikte gösterilecek tesis sayısı (Top N)", min_value=1, max_value=max(1, len(df)), value=min(5, len(df)))
+      max_n = len(df)
+if max_n == 0:
+    st.info("Grafikler için veri yok. Önce 'Tüm Tesisleri Çalıştır' yap.")
+    top_n = 0
+else:
+    top_n = st.slider(
+        "Grafikte gösterilecek tesis sayısı (Top N)",
+        min_value=1,
+        max_value=max_n,
+        value=min(5, max_n),
+    )
+
     df_top = df.head(top_n).set_index("facility_id")
 
     st.markdown("### Emisyonlar (tCO2e/yıl) – Tesis Bazlı")
