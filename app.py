@@ -1,12 +1,15 @@
-File "/mount/src/biolot1/app.py", line 9
-  from engine.hvac import calc_hvac_savings_simple
-  ^
-SyntaxError: expected 'except' or 'finally' block
+import streamlit as st
+
+st.set_page_config(page_title="BIOLOT", layout="wide")
+st.title("BIOLOT - Endüstriyel Çevresel Performans Platformu")
+
+# -------------------------------
+# MOTOR IMPORT (MODÜLER YAPI)
+# -------------------------------
 try:
     from engine.carbon import calc_scope12
-from engine.hvac import calc_hvac_savings_simple
-from engine.water import calc_water_savings
-
+    from engine.hvac import calc_hvac_savings_simple
+    from engine.water import calc_water_savings
 except Exception as e:
     st.error("Hesap motoru yüklenemedi.")
     st.code(str(e))
@@ -15,17 +18,16 @@ except Exception as e:
 # -------------------------------
 # SIDEBAR – GİRDİLER
 # -------------------------------
-
-st.sidebar.header("Tesis Bilgileri")
+st.sidebar.header("Tesis Parametreleri")
 
 electricity_kwh_year = st.sidebar.number_input(
-    "Yıllık Elektrik Tüketimi (kWh)",
+    "Yıllık Elektrik (kWh)",
     min_value=0.0,
     value=2500000.0
 )
 
 natural_gas_m3_year = st.sidebar.number_input(
-    "Yıllık Doğalgaz Tüketimi (m3)",
+    "Yıllık Doğalgaz (m3)",
     min_value=0.0,
     value=180000.0
 )
@@ -37,7 +39,6 @@ area_m2 = st.sidebar.number_input(
 )
 
 st.sidebar.divider()
-st.sidebar.subheader("Karbon Parametreleri")
 
 carbon_price = st.sidebar.number_input(
     "Karbon Fiyatı (€/ton)",
@@ -52,22 +53,21 @@ grid_factor = st.sidebar.number_input(
 )
 
 gas_factor = st.sidebar.number_input(
-    "Doğalgaz Emisyon Faktörü (kgCO2/m3)",
+    "Gaz Emisyon Faktörü (kgCO2/m3)",
     min_value=0.0,
     value=2.0
 )
 
 st.sidebar.divider()
-st.sidebar.subheader("Mikroklima / HVAC")
 
 delta_t = st.sidebar.number_input(
-    "Yeşil Altyapı Soğutma Etkisi (°C)",
+    "Yeşil Soğutma Etkisi (°C)",
     min_value=0.0,
     value=2.4
 )
 
 energy_sensitivity = st.sidebar.number_input(
-    "1°C Başına Enerji Azalış Oranı (0.04 = %4)",
+    "1°C Başına Enerji Azalış Oranı",
     min_value=0.0,
     value=0.04
 )
@@ -79,16 +79,15 @@ beta = st.sidebar.number_input(
 )
 
 st.sidebar.divider()
-st.sidebar.subheader("Su / Pompa Verimliliği")
 
 water_baseline = st.sidebar.number_input(
-    "Referans Su Tüketimi (m3/yıl)",
+    "Referans Su (m3/yıl)",
     min_value=0.0,
     value=12000.0
 )
 
 water_actual = st.sidebar.number_input(
-    "Mevcut Su Tüketimi (m3/yıl)",
+    "Mevcut Su (m3/yıl)",
     min_value=0.0,
     value=8000.0
 )
@@ -102,21 +101,34 @@ pump_kwh_per_m3 = st.sidebar.number_input(
 # -------------------------------
 # HESAPLAMA
 # -------------------------------
-
 st.divider()
 st.subheader("Analiz Sonuçları")
 
-run = st.button("Analizi Başlat", type="primary")
+if st.button("Analizi Başlat", type="primary"):
 
-if run:
-
-    # --- Karbon ---
     karbon = calc_scope12(
-        electricity_kwh_year=electricity_kwh_year,
-        natural_gas_m3_year=natural_gas_m3_year,
-        grid_factor_kg_per_kwh=grid_factor,
-        gas_factor_kg_per_m3=gas_factor,
-        carbon_price_eur_per_ton=carbon_price,
+        electricity_kwh_year,
+        natural_gas_m3_year,
+        grid_factor,
+        gas_factor,
+        carbon_price
+    )
+
+    hvac = calc_hvac_savings_simple(
+        electricity_kwh_year,
+        delta_t,
+        energy_sensitivity,
+        beta,
+        grid_factor,
+        carbon_price
+    )
+
+    su = calc_water_savings(
+        water_baseline,
+        water_actual,
+        pump_kwh_per_m3,
+        grid_factor,
+        carbon_price
     )
 
     scope1 = karbon["scope1_ton"]
@@ -124,61 +136,30 @@ if run:
     toplam = karbon["total_ton"]
     risk = karbon["risk_eur"]
 
-    if electricity_kwh_year > 0:
-        yogunluk_enerji = toplam / (electricity_kwh_year / 1000000.0)
-    else:
-        yogunluk_enerji = 0.0
-
-    yogunluk_alan = toplam / (area_m2 / 1000.0)
-
     st.subheader("Karbon Göstergeleri")
-
     k1, k2, k3 = st.columns(3)
     k1.metric("Scope 1 (ton/yıl)", f"{scope1:.2f}")
     k2.metric("Scope 2 (ton/yıl)", f"{scope2:.2f}")
     k3.metric("Toplam Emisyon (ton/yıl)", f"{toplam:.2f}")
 
-    k4, k5, k6 = st.columns(3)
-    k4.metric("Karbon Finansal Riski (€ / yıl)", f"{risk:.0f}")
-    k5.metric("Emisyon Yoğunluğu (ton/GWh)", f"{yogunluk_enerji:.2f}")
-    k6.metric("Alan Yoğunluğu (ton/1000m2)", f"{yogunluk_alan:.2f}")
-
-    # --- HVAC ---
-    hvac = calc_hvac_savings_simple(
-        electricity_kwh_year=electricity_kwh_year,
-        delta_t_c=delta_t,
-        energy_sensitivity_per_c=energy_sensitivity,
-        beta=beta,
-        grid_factor_kg_per_kwh=grid_factor,
-        carbon_price_eur_per_ton=carbon_price,
-    )
+    k4 = st.metric("Karbon Riski (€ / yıl)", f"{risk:.0f}")
 
     st.divider()
-    st.subheader("Mikroklima Etkisi (HVAC)")
+    st.subheader("HVAC Etkisi")
 
     h1, h2, h3 = st.columns(3)
     h1.metric("Enerji Tasarrufu (kWh/yıl)", f"{hvac['saved_kwh']:.0f}")
     h2.metric("Önlenen CO2 (ton/yıl)", f"{hvac['saved_co2_ton']:.2f}")
-    h3.metric("Kaçınılan Maliyet (€ / yıl)", f"{hvac['saved_eur']:.0f}")
-
-    # --- Su ---
-    su = calc_water_savings(
-        water_baseline_m3_year=water_baseline,
-        water_actual_m3_year=water_actual,
-        pump_kwh_per_m3=pump_kwh_per_m3,
-        grid_factor_kg_per_kwh=grid_factor,
-        carbon_price_eur_per_ton=carbon_price,
-    )
+    h3.metric("Kaçınılan Maliyet (€)", f"{hvac['saved_eur']:.0f}")
 
     st.divider()
-    st.subheader("Su ve Pompa Verimliliği")
+    st.subheader("Su Verimliliği")
 
     s1, s2, s3 = st.columns(3)
     s1.metric("Tasarruf Edilen Su (m3/yıl)", f"{su['saved_water_m3']:.0f}")
     s2.metric("Pompa Enerji Tasarrufu (kWh/yıl)", f"{su['saved_pump_kwh']:.0f}")
-    s3.metric("Kaçınılan Maliyet (€ / yıl)", f"{su['saved_eur']:.0f}")
+    s3.metric("Kaçınılan Maliyet (€)", f"{su['saved_eur']:.0f}")
 
-    # --- Toplam ---
     toplam_kwh = hvac["saved_kwh"] + su["saved_pump_kwh"]
     toplam_co2 = hvac["saved_co2_ton"] + su["saved_co2_ton"]
     toplam_euro = hvac["saved_eur"] + su["saved_eur"]
@@ -189,7 +170,7 @@ if run:
     t1, t2, t3 = st.columns(3)
     t1.metric("Toplam Enerji Tasarrufu (kWh/yıl)", f"{toplam_kwh:.0f}")
     t2.metric("Toplam Önlenen CO2 (ton/yıl)", f"{toplam_co2:.2f}")
-    t3.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{toplam_euro:.0f}")
+    t3.metric("Toplam Kaçınılan Maliyet (€)", f"{toplam_euro:.0f}")
 
 else:
-    st.info("Soldaki parametreleri girin ve analizi başlatın.")
+    st.info("Parametreleri girin ve analizi başlatın.")
