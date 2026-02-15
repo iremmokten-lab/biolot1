@@ -12,6 +12,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
 # -------------------------------
 # ENGINE IMPORT
 # -------------------------------
@@ -23,7 +26,7 @@ except Exception as e:
     st.stop()
 
 # -------------------------------
-# SABİT: Varsayılan tesis girdileri
+# DEFAULT INPUTS
 # -------------------------------
 DEFAULT_INPUTS = {
     "electricity_kwh_year": 2500000.0,
@@ -71,17 +74,43 @@ def read_audit_log_text() -> str:
         return f.read()
 
 # -------------------------------
-# PDF (Grafiksiz, Stabil)
+# FONT SETUP (Türkçe karakterler için)
+# -------------------------------
+def setup_fonts():
+    """
+    Repo içinde şu dosyalar olmalı:
+      fonts/DejaVuSans.ttf
+      fonts/DejaVuSans-Bold.ttf
+    """
+    base_font = "Helvetica"
+    bold_font = "Helvetica-Bold"
+
+    try:
+        pdfmetrics.registerFont(TTFont("DejaVuSans", "fonts/DejaVuSans.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", "fonts/DejaVuSans-Bold.ttf"))
+        base_font = "DejaVuSans"
+        bold_font = "DejaVuSans-Bold"
+    except Exception:
+        # Font bulunamazsa PDF Türkçe karakterleri bozabilir
+        pass
+
+    return base_font, bold_font
+
+# -------------------------------
+# PDF BUILDER
 # -------------------------------
 def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
+    base_font, bold_font = setup_fonts()
+
     styles = getSampleStyleSheet()
     story = []
 
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    story.append(Paragraph("BIOLOT – Portföy Raporu", styles["Title"]))
+
+    story.append(Paragraph(f"<font name='{bold_font}'>BIOLOT – Portföy Raporu</font>", styles["Title"]))
     story.append(Spacer(1, 10))
-    story.append(Paragraph(f"Oluşturulma: {now_utc}", styles["Normal"]))
-    story.append(Paragraph(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}", styles["Normal"]))
+    story.append(Paragraph(f"<font name='{base_font}'>Oluşturulma: {now_utc}</font>", styles["Normal"]))
+    story.append(Paragraph(f"<font name='{base_font}'>Motor Versiyonu: {BIOL0T_ENGINE_VERSION}</font>", styles["Normal"]))
     story.append(Spacer(1, 14))
 
     totals = portfolio["portfolio_totals"]
@@ -94,32 +123,33 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
         ["Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}"],
         ["Toplam Önlenen CO2 (t/yıl)", f"{totals['total_saved_co2_ton']:.3f}"],
     ]
+
     t = Table(kpi_data, hAlign="LEFT")
     t.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
         ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
         ("PADDING", (0,0), (-1,-1), 6),
     ]))
     story.append(t)
     story.append(Spacer(1, 16))
 
-    story.append(Paragraph("Tesis Özeti (Tablo)", styles["Heading2"]))
+    story.append(Paragraph(f"<font name='{bold_font}'>Tesis Özeti (Tablo)</font>", styles["Heading2"]))
     if len(df) > 0:
-        df_pdf = df.copy()
-        # PDF'yi çok büyütmemek için ilk 15 satır
-        df_pdf = df_pdf.head(15)
+        df_pdf = df.head(15).copy()
         table_data = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
         t2 = Table(table_data, hAlign="LEFT")
         t2.setStyle(TableStyle([
             ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
             ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME", (0,0), (-1,0), bold_font),
+            ("FONTNAME", (0,1), (-1,-1), base_font),
             ("PADDING", (0,0), (-1,-1), 6),
         ]))
         story.append(t2)
     else:
-        story.append(Paragraph("Tablo için veri yok.", styles["Normal"]))
+        story.append(Paragraph(f"<font name='{base_font}'>Tablo için veri yok.</font>", styles["Normal"]))
 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, title="BIOLOT Portföy Raporu")
@@ -131,7 +161,6 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
 # -------------------------------
 if "facilities" not in st.session_state:
     st.session_state["facilities"] = [{"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}]
-
 if "portfolio_result" not in st.session_state:
     st.session_state["portfolio_result"] = None
 
@@ -144,17 +173,11 @@ st.caption(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}")
 
 st.divider()
 
-# -------------------------------
-# Tesis Yönetimi
-# -------------------------------
 st.subheader("Tesis Yönetimi")
 
 col1, col2 = st.columns([2, 1])
 with col1:
-    new_facility_id = st.text_input(
-        "Yeni Tesis ID",
-        value=f"FAC-{len(st.session_state['facilities'])+1:03d}"
-    )
+    new_facility_id = st.text_input("Yeni Tesis ID", value=f"FAC-{len(st.session_state['facilities'])+1:03d}")
 with col2:
     if st.button("➕ Tesis Ekle", use_container_width=True):
         ids = [f["facility_id"] for f in st.session_state["facilities"]]
@@ -176,9 +199,6 @@ if st.button("🗑️ Seçili Tesisi Sil", disabled=(remove_id == "(silme)")):
 
 st.divider()
 
-# -------------------------------
-# Tesis Girdileri (kayıp olan bölüm buydu)
-# -------------------------------
 st.subheader("Tesis Girdileri")
 
 if len(st.session_state["facilities"]) == 0:
@@ -219,9 +239,6 @@ else:
 
 st.divider()
 
-# -------------------------------
-# Portföy Analizi
-# -------------------------------
 st.subheader("Portföy Analizi")
 
 run_all = st.button("🚀 Tüm Tesisleri Çalıştır", type="primary")
@@ -273,9 +290,6 @@ if run_all:
     st.session_state["portfolio_result"] = portfolio
     st.success("Portföy analizi tamamlandı.")
 
-# -------------------------------
-# Dashboard
-# -------------------------------
 portfolio = st.session_state.get("portfolio_result")
 
 if portfolio:
