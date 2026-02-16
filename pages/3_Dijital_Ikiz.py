@@ -16,10 +16,9 @@ import plotly.graph_objects as go
 # BIOLOT motor
 from engine import run_biolot
 
-
 st.set_page_config(page_title="BIOLOT | Dijital İkiz", layout="wide")
 st.title("Dijital İkiz (2D) — Zonlar • Sensörler • Katmanlar")
-st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu görseli üstü) aynı sayfada. Haritayı kaybetmiyoruz.")
+st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu/plan görseli üstü)")
 
 DATA_DIR = Path("data")
 ZONES_PATH = DATA_DIR / "zones.json"
@@ -29,9 +28,9 @@ PLAN_IMG_PNG = Path("assets/site_plan.png")
 PLAN_IMG_JPG = Path("assets/site_plan.jpg")
 
 
-# --------------------------
+# -------------------------------
 # Helpers
-# --------------------------
+# -------------------------------
 def load_json(path: Path):
     if not path.exists():
         st.error(f"Dosya bulunamadı: {path.as_posix()}")
@@ -66,9 +65,22 @@ def image_to_data_uri(img_path: str) -> str:
     return f"data:image/{ext};base64," + base64.b64encode(b).decode("utf-8")
 
 
-# --------------------------
-# Data load
-# --------------------------
+def clamp(v: float, lo: float, hi: float) -> float:
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
+
+
+def clamp_point_xy(x: float, y: float, width: float, height: float):
+    # x: 0..width, y: 0..height
+    return clamp(x, 0, width), clamp(y, 0, height)
+
+
+# -------------------------------
+# Load data
+# -------------------------------
 zones_data = load_json(ZONES_PATH)
 sensors_data = load_json(SENSORS_PATH)
 
@@ -79,10 +91,7 @@ if not zones:
     st.error("zones.json içinde 'zones' listesi boş.")
     st.stop()
 
-
-# --------------------------
-# Sidebar
-# --------------------------
+# ---------------- Sidebar ----------------
 st.sidebar.header("Mod")
 view_mode = st.sidebar.radio("Mod seç", ["Harita Modu", "Tesis Planı Modu"], index=0)
 
@@ -94,10 +103,8 @@ show_heatmap = st.sidebar.checkbox("Isı haritası (sensör sıcaklığı)", val
 
 st.sidebar.divider()
 st.sidebar.header("Tesis Parametreleri (BIOLOT Motor)")
-
 electricity_kwh_year = st.sidebar.number_input("Yıllık Elektrik (kWh)", min_value=0.0, value=2500000.0)
 natural_gas_m3_year = st.sidebar.number_input("Yıllık Doğalgaz (m3)", min_value=0.0, value=180000.0)
-
 carbon_price = st.sidebar.number_input("Karbon Fiyatı (€/ton)", min_value=0.0, value=85.5)
 grid_factor = st.sidebar.number_input("Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=0.43)
 gas_factor = st.sidebar.number_input("Gaz Emisyon Faktörü (kgCO2/m3)", min_value=0.0, value=2.0)
@@ -115,10 +122,7 @@ zone_names = [z.get("name", "Zon") for z in zones]
 selected_zone_name = st.sidebar.selectbox("Zon seç", zone_names, index=0)
 selected_zone = next(z for z in zones if z.get("name") == selected_zone_name)
 
-
-# --------------------------
-# Engine + KPI
-# --------------------------
+# ---------------- Engine + KPI ----------------
 total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones) or 1.0
 
 out = run_biolot(
@@ -136,23 +140,23 @@ out = run_biolot(
     pump_kwh_per_m3=pump_kwh_per_m3,
 )
 
-carbon_total = out.get("carbon", {})
-hvac_total = out.get("hvac", {})
-water_total = out.get("water", {})
-op_total = out.get("total_operational_gain", {})
+carbon_total = out["carbon"]
+hvac_total = out["hvac"]
+water_total = out["water"]
+op_total = out["total_operational_gain"]
 
 zone_area = float(selected_zone.get("area_m2", 0))
 zone_share = max(0.0, min(1.0, zone_area / total_area_m2))
 
 zone_kpi = {
-    "total_ton": float(carbon_total.get("total_ton", 0.0)) * zone_share,
-    "risk_eur": float(carbon_total.get("risk_eur", 0.0)) * zone_share,
-    "hvac_saved_kwh": float(hvac_total.get("saved_kwh", 0.0)) * zone_share,
-    "hvac_saved_eur": float(hvac_total.get("saved_eur", 0.0)) * zone_share,
-    "water_saved_m3": float(water_total.get("saved_water_m3", 0.0)) * zone_share,
-    "pump_saved_kwh": float(water_total.get("saved_pump_kwh", 0.0)) * zone_share,
-    "total_saved_kwh": float(op_total.get("total_saved_kwh", 0.0)) * zone_share,
-    "total_saved_eur": float(op_total.get("total_saved_eur", 0.0)) * zone_share,
+    "total_ton": carbon_total["total_ton"] * zone_share,
+    "risk_eur": carbon_total["risk_eur"] * zone_share,
+    "hvac_saved_kwh": hvac_total["saved_kwh"] * zone_share,
+    "hvac_saved_eur": hvac_total["saved_eur"] * zone_share,
+    "water_saved_m3": water_total["saved_water_m3"] * zone_share,
+    "pump_saved_kwh": water_total["saved_pump_kwh"] * zone_share,
+    "total_saved_kwh": op_total["total_saved_kwh"] * zone_share,
+    "total_saved_eur": op_total["total_saved_eur"] * zone_share,
 }
 
 if zone_kpi["risk_eur"] > 50000:
@@ -167,7 +171,7 @@ def render_right_panel():
     st.subheader("Zon Özeti")
     st.write(f"**Zon:** {selected_zone.get('name','-')}")
     st.write(f"**Alan:** {selected_zone.get('area_m2','-')} m²")
-    st.write(f"**Pay:** %{(zone_share * 100):.1f}")
+    st.write(f"**Pay:** %{(zone_share*100):.1f}")
     st.write(f"**Risk Seviyesi:** {risk_flag}")
 
     st.divider()
@@ -200,14 +204,11 @@ def render_map_mode():
     if show_zones:
         zones_fg = folium.FeatureGroup(name="Zonlar", show=True)
         for z in zones:
-            poly = z.get("polygon", [])
-            if not poly:
-                continue
+            poly = z["polygon"]
             style = z.get("style", {})
             color = style.get("color", "#2E7D32")
             fill_color = style.get("fillColor", "#66BB6A")
             fill_opacity = style.get("fillOpacity", 0.25)
-
             folium.Polygon(
                 locations=poly,
                 color=color,
@@ -222,8 +223,6 @@ def render_map_mode():
     if show_sensors:
         sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
         for s in sensors:
-            if "lat" not in s or "lon" not in s:
-                continue
             folium.CircleMarker(
                 location=[s["lat"], s["lon"]],
                 radius=6,
@@ -239,7 +238,7 @@ def render_map_mode():
         heat_points = []
         for s in sensors:
             temp = s.get("last", {}).get("temp_c", None)
-            if temp is not None and "lat" in s and "lon" in s:
+            if temp is not None:
                 heat_points.append([s["lat"], s["lon"], float(temp)])
         if heat_points:
             hm_fg = folium.FeatureGroup(name="Isı Haritası (Temp)", show=True)
@@ -262,30 +261,56 @@ def render_plan_mode():
 
     fig = go.Figure()
 
-    # Görseli grafiğe göm (overlay stabil)
+    # ✅ En kritik düzeltme:
+    # Plotly'de piksel koordinatı mantığı için görseli "top-left" oturtuyoruz:
+    # x=0 (sol), y=height (üst), y ekseni ters çevrildiğinde birebir oturur.
     fig.add_layout_image(
         dict(
             source=img_uri,
             xref="x",
             yref="y",
             x=0,
-            y=0,
+            y=height,
             sizex=width,
             sizey=height,
+            xanchor="left",
+            yanchor="top",
             sizing="stretch",
             layer="below",
             opacity=1.0,
         )
     )
 
-    # Zonlar
+    # Koordinat taşmalarını say (debug)
+    clipped_polys = 0
+    clipped_points = 0
+
+    # ✅ Zonlar (clamp ile taşma yok)
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px")
             if not poly_px:
                 continue
-            xs = [p[0] for p in poly_px] + [poly_px[0][0]]
-            ys = [p[1] for p in poly_px] + [poly_px[0][1]]
+
+            xs, ys = [], []
+            before_clip = False
+
+            for p in poly_px:
+                x0 = float(p[0])
+                y0 = float(p[1])
+                x1, y1 = clamp_point_xy(x0, y0, width, height)
+                if x0 != x1 or y0 != y1:
+                    before_clip = True
+                xs.append(x1)
+                ys.append(y1)
+
+            # kapat
+            xs.append(xs[0])
+            ys.append(ys[0])
+
+            if before_clip:
+                clipped_polys += 1
+
             fig.add_trace(
                 go.Scatter(
                     x=xs,
@@ -296,14 +321,20 @@ def render_plan_mode():
                 )
             )
 
-    # Sensörler
+    # ✅ Sensörler (clamp ile taşma yok)
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
-                xs.append(float(s["x"]))
-                ys.append(float(s["y"]))
+                x0 = float(s["x"])
+                y0 = float(s["y"])
+                x1, y1 = clamp_point_xy(x0, y0, width, height)
+                if x0 != x1 or y0 != y1:
+                    clipped_points += 1
+                xs.append(x1)
+                ys.append(y1)
                 names.append(s.get("name", "Sensör"))
+
         if xs:
             fig.add_trace(
                 go.Scatter(
@@ -317,9 +348,11 @@ def render_plan_mode():
                 )
             )
 
-    # Piksel ekseni: (0,0) sol-üst
+    # ✅ Piksel ekseni ayarı:
+    # x: 0..width, y: 0..height (0 üstte kalsın diye y range ters)
     fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
     fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
+
     fig.update_layout(
         height=650,
         margin=dict(l=0, r=0, t=0, b=0),
@@ -328,10 +361,16 @@ def render_plan_mode():
 
     st.plotly_chart(fig, use_container_width=True)
 
+    # Debug uyarısı (sunumdan önce kontrol)
+    if clipped_polys > 0 or clipped_points > 0:
+        st.warning(
+            f"Plan koordinatlarında taşma vardı ve otomatik düzeltildi. "
+            f"Zon (clamp): {clipped_polys} | Sensör (clamp): {clipped_points}. "
+            f"(Sunum için sorun değil; veri kalibrasyonu sonrası sıfırlanır.)"
+        )
 
-# --------------------------
-# Layout
-# --------------------------
+
+# ---------------- Layout ----------------
 left, right = st.columns([2, 1], gap="large")
 
 with left:
