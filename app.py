@@ -303,6 +303,59 @@ if portfolio:
     k2.metric("Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}")
     k3.metric("Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}")
     k4.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}")
+st.divider()
+st.subheader("✅ Karbon Vergisi / ETS Hazırlık (Senaryo)")
+
+colA, colB, colC = st.columns([1, 1, 2])
+
+with colA:
+    ets_price = st.number_input(
+        "Karbon Fiyatı (€/tCO2)",
+        min_value=0.0,
+        value=50.0,
+        step=5.0,
+        help="Senaryo amaçlı fiyat. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde güncellenecektir."
+    )
+
+with colB:
+    ets_mode = st.selectbox(
+        "Senaryo",
+        ["Conservative", "Base", "Aggressive"],
+        index=1,
+        help="2026–2028 fiyat projeksiyonu demo amaçlıdır."
+    )
+
+# 2026–2028 senaryo fiyatları (demo amaçlı)
+if ets_mode == "Conservative":
+    years = [2026, 2027, 2028]
+    prices = [25, 30, 35]
+elif ets_mode == "Aggressive":
+    years = [2026, 2027, 2028]
+    prices = [60, 75, 90]
+else:  # Base
+    years = [2026, 2027, 2028]
+    prices = [40, 50, 60]
+
+df_ets = pd.DataFrame({"Yıl": years, "Fiyat (€/tCO2)": prices})
+
+with colC:
+    fig = px.line(df_ets, x="Yıl", y="Fiyat (€/tCO2)", markers=True)
+    fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig, use_container_width=True)
+
+# Tahmini yükümlülük (senaryo)
+total_tco2 = float(totals["total_ton"])
+ets_liability_eur = total_tco2 * float(ets_price)
+
+m1, m2, m3 = st.columns(3)
+m1.metric("Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:,.2f}")
+m2.metric("Seçili Fiyat (€/tCO2)", f"{float(ets_price):,.2f}")
+m3.metric("Tahmini Yükümlülük (€)", f"{ets_liability_eur:,.0f}")
+
+st.caption(
+    "Bu bölüm **senaryo amaçlıdır**. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde "
+    "hesaplama parametreleri ve raporlama formatı **resmi metodolojiye göre güncellenecektir**."
+)
 
     rows = []
     for f in portfolio["facilities"]:
