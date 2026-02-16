@@ -18,7 +18,7 @@ from engine import run_biolot
 
 st.set_page_config(page_title="BIOLOT | Dijital İkiz", layout="wide")
 st.title("Dijital İkiz (2D) — Zonlar • Sensörler • Katmanlar")
-st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (uydu/plan görseli üstü)")
+st.caption("Harita Modu (Leaflet) + Tesis Planı Modu (görsel üstü zon/sensör)")
 
 DATA_DIR = Path("data")
 ZONES_PATH = DATA_DIR / "zones.json"
@@ -56,15 +56,6 @@ def load_plan_image_path():
     return None
 
 
-def image_to_data_uri(img_path: str) -> str:
-    p = Path(img_path)
-    b = p.read_bytes()
-    ext = p.suffix.lower().replace(".", "")
-    if ext == "jpg":
-        ext = "jpeg"
-    return f"data:image/{ext};base64," + base64.b64encode(b).decode("utf-8")
-
-
 def clamp(v: float, lo: float, hi: float) -> float:
     if v < lo:
         return lo
@@ -74,7 +65,6 @@ def clamp(v: float, lo: float, hi: float) -> float:
 
 
 def clamp_point_xy(x: float, y: float, width: float, height: float):
-    # x: 0..width, y: 0..height
     return clamp(x, 0, width), clamp(y, 0, height)
 
 
@@ -257,16 +247,13 @@ def render_plan_mode():
 
     img = Image.open(img_path)
     width, height = img.size
-    img_uri = image_to_data_uri(img_path)
 
     fig = go.Figure()
 
-    # ✅ En kritik düzeltme:
-    # Plotly'de piksel koordinatı mantığı için görseli "top-left" oturtuyoruz:
-    # x=0 (sol), y=height (üst), y ekseni ters çevrildiğinde birebir oturur.
+    # ✅ En stabil yöntem: PIL Image ile arka plan
     fig.add_layout_image(
         dict(
-            source=img_uri,
+            source=img,
             xref="x",
             yref="y",
             x=0,
@@ -281,11 +268,10 @@ def render_plan_mode():
         )
     )
 
-    # Koordinat taşmalarını say (debug)
     clipped_polys = 0
     clipped_points = 0
 
-    # ✅ Zonlar (clamp ile taşma yok)
+    # Zon çizimi (taşma clamp)
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px")
@@ -304,7 +290,6 @@ def render_plan_mode():
                 xs.append(x1)
                 ys.append(y1)
 
-            # kapat
             xs.append(xs[0])
             ys.append(ys[0])
 
@@ -321,7 +306,7 @@ def render_plan_mode():
                 )
             )
 
-    # ✅ Sensörler (clamp ile taşma yok)
+    # Sensör çizimi (taşma clamp)
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
@@ -348,8 +333,7 @@ def render_plan_mode():
                 )
             )
 
-    # ✅ Piksel ekseni ayarı:
-    # x: 0..width, y: 0..height (0 üstte kalsın diye y range ters)
+    # Piksel eksenleri (0 üstte)
     fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
     fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
 
@@ -361,12 +345,10 @@ def render_plan_mode():
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Debug uyarısı (sunumdan önce kontrol)
     if clipped_polys > 0 or clipped_points > 0:
         st.warning(
             f"Plan koordinatlarında taşma vardı ve otomatik düzeltildi. "
-            f"Zon (clamp): {clipped_polys} | Sensör (clamp): {clipped_points}. "
-            f"(Sunum için sorun değil; veri kalibrasyonu sonrası sıfırlanır.)"
+            f"Zon (clamp): {clipped_polys} | Sensör (clamp): {clipped_points}."
         )
 
 
