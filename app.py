@@ -144,6 +144,157 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
     story.append(Spacer(1, 10))
     story.append(Paragraph(f"<font name='{base_font}'>Oluşturulma: {now_utc}</font>", styles["Normal"]))
     story.append(Paragraph(f"<font name='{base_font}'>Motor Versiyonu: {BIOL0T_ENGINE_VERSION}</font>", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    totals = portfolio["portfolio_totals"]
+
+    # --- KPI TABLOSU ---
+    kpi_data = [
+        ["Gösterge", "Değer"],
+        ["Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}"],
+        ["Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}"],
+        ["Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}"],
+        ["Toplam Enerji Tasarrufu (kWh/yıl)", f"{totals['total_saved_kwh']:.0f}"],
+        ["Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}"],
+        ["Toplam Önlenen CO2 (t/yıl)", f"{totals['total_saved_co2_ton']:.3f}"],
+    ]
+
+    t = Table(kpi_data, hAlign="LEFT", colWidths=[240, 250])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
+        ("FONTSIZE", (0,0), (-1,-1), 10),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 12))
+
+    # --- ETS SECTION ---
+    total_tco2 = float(totals["total_ton"])
+    ets_liability = total_tco2 * float(ets_price)
+    df_proj = ets_projection(ets_mode)
+
+    story.append(Paragraph(
+        f"<font name='{bold_font}'>Karbon Vergisi / ETS Hazırlık Modülü (Senaryo)</font>",
+        styles["Heading2"]
+    ))
+    story.append(Spacer(1, 6))
+
+    ets_table = [
+        ["Gösterge", "Değer"],
+        ["Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:.2f}"],
+        ["Seçili Karbon Fiyatı (€/tCO2)", f"{float(ets_price):.2f}"],
+        ["Tahmini Yükümlülük (€)", f"{ets_liability:.0f}"],
+        ["Senaryo", str(ets_mode)],
+    ]
+    t_ets = Table(ets_table, hAlign="LEFT", colWidths=[240, 250])
+    t_ets.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
+        ("FONTSIZE", (0,0), (-1,-1), 10),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(t_ets)
+    story.append(Spacer(1, 8))
+
+    proj_table = [["Yıl", "Fiyat (€/tCO2)"]] + df_proj.values.tolist()
+    t_proj = Table(proj_table, hAlign="LEFT", colWidths=[80, 120])
+    t_proj.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
+        ("FONTSIZE", (0,0), (-1,-1), 10),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(t_proj)
+    story.append(Spacer(1, 6))
+
+    story.append(Paragraph(f"<font name='{base_font}'>{ets_disclaimer_text()}</font>", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    # --- TESİS ÖZETİ TABLOSU (SAYFA TAŞMASINI ÖNLEYEN VERSİYON) ---
+    story.append(Paragraph(f"<font name='{bold_font}'>Tesis Özeti (Tablo)</font>", styles["Heading2"]))
+    story.append(Spacer(1, 6))
+
+    if len(df) > 0:
+        df_pdf = df.head(15).copy()
+
+        # Sütunları kısalt + sayıları yuvarla (genişliği düşürür)
+        rename_map = {
+            "tesis_id": "Tesis",
+            "toplam_emisyon_ton": "Top.Emis(t)",
+            "scope1_ton": "S1(t)",
+            "scope2_ton": "S2(t)",
+            "tasarruf_eur": "Tasarr(€)",
+            "tasarruf_kwh": "Tasarr(kWh)",
+        }
+        df_pdf = df_pdf.rename(columns=rename_map)
+
+        # Sadece beklenen sütunlar (güvenli)
+        keep_cols = ["Tesis", "Top.Emis(t)", "S1(t)", "S2(t)", "Tasarr(€)", "Tasarr(kWh)"]
+        df_pdf = df_pdf[[c for c in keep_cols if c in df_pdf.columns]]
+
+        # Format (çok uzun floatları kes)
+        for c in df_pdf.columns:
+            if c != "Tesis":
+                df_pdf[c] = pd.to_numeric(df_pdf[c], errors="coerce").fillna(0.0)
+
+        df_pdf["Top.Emis(t)"] = df_pdf["Top.Emis(t)"].map(lambda x: f"{x:,.1f}")
+        df_pdf["S1(t)"] = df_pdf["S1(t)"].map(lambda x: f"{x:,.1f}")
+        df_pdf["S2(t)"] = df_pdf["S2(t)"].map(lambda x: f"{x:,.1f}")
+        if "Tasarr(€)" in df_pdf.columns:
+            df_pdf["Tasarr(€)"] = df_pdf["Tasarr(€)"].map(lambda x: f"{x:,.0f}")
+        if "Tasarr(kWh)" in df_pdf.columns:
+            df_pdf["Tasarr(kWh)"] = df_pdf["Tasarr(kWh)"].map(lambda x: f"{x:,.0f}")
+
+        table_data = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
+
+        # A4 için güvenli kolon genişlikleri (toplam ~500)
+        col_widths = [70, 80, 60, 60, 70, 90]
+        t2 = Table(table_data, hAlign="LEFT", colWidths=col_widths, repeatRows=1)
+        t2.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+            ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+            ("FONTNAME", (0,0), (-1,0), bold_font),
+            ("FONTNAME", (0,1), (-1,-1), base_font),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("PADDING", (0,0), (-1,-1), 4),
+            ("ALIGN", (1,1), (-1,-1), "RIGHT"),
+        ]))
+        story.append(t2)
+    else:
+        story.append(Paragraph(f"<font name='{base_font}'>Tablo için veri yok.</font>", styles["Normal"]))
+
+    # Daha dar margin ile sayfa taşmasını azalt
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        title="BIOLOT Portföy Raporu",
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=24,
+        bottomMargin=24,
+    )
+    doc.build(story)
+    return buf.getvalue()
+
+    base_font, bold_font = setup_fonts()
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    story.append(Paragraph(f"<font name='{bold_font}'>BIOLOT – Portföy Raporu</font>", styles["Title"]))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph(f"<font name='{base_font}'>Oluşturulma: {now_utc}</font>", styles["Normal"]))
+    story.append(Paragraph(f"<font name='{base_font}'>Motor Versiyonu: {BIOL0T_ENGINE_VERSION}</font>", styles["Normal"]))
     story.append(Spacer(1, 14))
 
     totals = portfolio["portfolio_totals"]
