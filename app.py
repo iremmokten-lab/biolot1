@@ -523,11 +523,13 @@ if run_all:
     st.success("Portföy analizi tamamlandı.")
 
 portfolio = st.session_state.get("portfolio_result")
-
-if portfolio:
+    if portfolio:
     totals = portfolio["portfolio_totals"]
 
     st.subheader("Portföy KPI")
+
+
+
     st.divider()
 st.subheader("🤖 Hızlı Öneri Modu (Explainable)")
 
