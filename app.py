@@ -528,6 +528,62 @@ if portfolio:
     totals = portfolio["portfolio_totals"]
 
     st.subheader("Portföy KPI")
+    st.divider()
+st.subheader("🤖 Hızlı Öneri Modu (Explainable)")
+
+tot_emis = float(totals["total_ton"])
+tot_saving_eur = float(totals["total_saved_eur"])
+tot_saving_kwh = float(totals["total_saved_kwh"])
+
+# Basit eşikler (demo amaçlı)
+high_emis = tot_emis >= 2000
+high_saving = tot_saving_eur >= 5000
+low_saving = tot_saving_eur < 1000
+
+rec_title = ""
+rec_reason = ""
+rec_action = ""
+
+if high_emis and high_saving:
+    rec_title = "Öncelik: Enerji + HVAC hızlı kazanım"
+    rec_reason = (
+        f"Toplam emisyon {tot_emis:.0f} tCO2e/yıl seviyesinde ve operasyonda "
+        f"{tot_saving_eur:.0f} €/yıl kaçınılan maliyet potansiyeli görünüyor."
+    )
+    rec_action = (
+        "1) HVAC setpoint / delta-T optimizasyonu (hedef: %3–7 kWh azaltım)\n"
+        "2) Elektrik tüketim profilinde pik saat analizi + yük kaydırma\n"
+        "3) Scope-2 azaltımı için şebeke faktörü/yenilenebilir tedarik senaryosu"
+    )
+elif high_emis and low_saving:
+    rec_title = "Öncelik: Emisyon kaynağı doğrulama + ölçüm altyapısı"
+    rec_reason = (
+        f"Emisyon yüksek ({tot_emis:.0f} tCO2e/yıl) ancak görünen tasarruf düşük "
+        f"({tot_saving_eur:.0f} €/yıl). Bu genellikle ölçüm/varsayım kalibrasyonu ihtiyacına işaret eder."
+    )
+    rec_action = (
+        "1) Elektrik ve gaz sayaç doğrulaması + aylık profil\n"
+        "2) Grid/gaz emisyon faktörü ve tesis sınırlarının (Scope) netleştirilmesi\n"
+        "3) Zon bazlı sensör yerleşimi ile HVAC ve su modülünün kalibrasyonu"
+    )
+else:
+    rec_title = "Öncelik: Stabil iyileştirme + ETS hazırlık"
+    rec_reason = (
+        f"Mevcut durumda emisyon {tot_emis:.0f} tCO2e/yıl ve tasarruf "
+        f"{tot_saving_eur:.0f} €/yıl seviyesinde. Platform ETS hazırlık senaryoları için hazır."
+    )
+    rec_action = (
+        "1) ETS senaryosunu 2026–2028 için 3 fiyat modu ile raporlayıp yönetime sun\n"
+        "2) Su modülünde baseline ve pompa enerji indeksini aylık takip et\n"
+        "3) Dijital ikizde kritik zonları işaretleyip pilot alanı seç"
+    )
+
+st.markdown(f"### ✅ {rec_title}")
+st.write("**Gerekçe (Explainable):**", rec_reason)
+st.write("**Önerilen Aksiyonlar:**")
+st.code(rec_action)
+st.caption("Not: Bu öneri demo amaçlı, kural-tabanlı explainable moddur. Pilot verilerle kurallar/parametreler geliştirilecektir.")
+
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}")
