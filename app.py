@@ -57,6 +57,7 @@ def append_audit_log(run_id: str, facility_id: str, inputs: dict, outputs: dict)
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_version": str(BIOL0T_ENGINE_VERSION),
         "facility_id": facility_id,
+        "event_type": "FACILITY_RUN",
         "inputs": inputs,
         "summary": {
             "scope1_ton": outputs.get("carbon", {}).get("scope1_ton"),
@@ -64,6 +65,19 @@ def append_audit_log(run_id: str, facility_id: str, inputs: dict, outputs: dict)
             "total_ton": outputs.get("carbon", {}).get("total_ton"),
             "total_saved_eur": outputs.get("total_operational_gain", {}).get("total_saved_eur"),
         },
+    }
+    with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+def append_event_log(event_type: str, payload: dict) -> None:
+    os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+    record = {
+        "run_id": str(uuid.uuid4()),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine_version": str(BIOL0T_ENGINE_VERSION),
+        "facility_id": payload.get("facility_id"),
+        "event_type": event_type,
+        "payload": payload,
     }
     with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -92,15 +106,33 @@ def setup_fonts():
         base_font = "DejaVuSans"
         bold_font = "DejaVuSans-Bold"
     except Exception:
-        # Font bulunamazsa PDF Türkçe karakterleri bozabilir
         pass
 
     return base_font, bold_font
 
 # -------------------------------
+# ETS (Scenario) helpers
+# -------------------------------
+def ets_projection(mode: str) -> pd.DataFrame:
+    years = [2026, 2027, 2028]
+    if mode == "Conservative":
+        prices = [25, 30, 35]
+    elif mode == "Aggressive":
+        prices = [60, 75, 90]
+    else:  # Base
+        prices = [40, 50, 60]
+    return pd.DataFrame({"Yıl": years, "Fiyat (€/tCO2)": prices})
+
+def ets_disclaimer_text() -> str:
+    return (
+        "Bu bölüm **senaryo amaçlıdır**. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde "
+        "hesaplama parametreleri ve raporlama formatı **resmi metodolojiye göre güncellenecektir**."
+    )
+
+# -------------------------------
 # PDF BUILDER
 # -------------------------------
-def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
+def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: float, ets_mode: str) -> bytes:
     base_font, bold_font = setup_fonts()
 
     styles = getSampleStyleSheet()
@@ -134,8 +166,50 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame) -> bytes:
         ("PADDING", (0,0), (-1,-1), 6),
     ]))
     story.append(t)
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 14))
 
+    # --- ETS Section (PDF) ---
+    total_tco2 = float(totals["total_ton"])
+    ets_liability = total_tco2 * float(ets_price)
+    df_proj = ets_projection(ets_mode)
+
+    story.append(Paragraph(f"<font name='{bold_font}'>Karbon Vergisi / ETS Hazırlık Modülü (Senaryo)</font>", styles["Heading2"]))
+    story.append(Spacer(1, 6))
+
+    ets_table = [
+        ["Gösterge", "Değer"],
+        ["Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:.2f}"],
+        ["Seçili Karbon Fiyatı (€/tCO2)", f"{float(ets_price):.2f}"],
+        ["Tahmini Yükümlülük (€)", f"{ets_liability:.0f}"],
+        ["Senaryo", str(ets_mode)],
+    ]
+    t_ets = Table(ets_table, hAlign="LEFT")
+    t_ets.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(t_ets)
+    story.append(Spacer(1, 8))
+
+    # projection table
+    proj_table = [["Yıl", "Fiyat (€/tCO2)"]] + df_proj.values.tolist()
+    t_proj = Table(proj_table, hAlign="LEFT")
+    t_proj.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), bold_font),
+        ("FONTNAME", (0,1), (-1,-1), base_font),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    story.append(t_proj)
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(f"<font name='{base_font}'>{ets_disclaimer_text()}</font>", styles["Normal"]))
+    story.append(Spacer(1, 14))
+
+    # --- Facility summary table ---
     story.append(Paragraph(f"<font name='{bold_font}'>Tesis Özeti (Tablo)</font>", styles["Heading2"]))
     if len(df) > 0:
         df_pdf = df.head(15).copy()
@@ -164,6 +238,12 @@ if "facilities" not in st.session_state:
     st.session_state["facilities"] = [{"facility_id": "FAC-001", "inputs": dict(DEFAULT_INPUTS)}]
 if "portfolio_result" not in st.session_state:
     st.session_state["portfolio_result"] = None
+
+# ETS UI state
+if "ets_price" not in st.session_state:
+    st.session_state["ets_price"] = 50.0
+if "ets_mode" not in st.session_state:
+    st.session_state["ets_mode"] = "Base"
 
 # -------------------------------
 # UI
@@ -303,60 +383,66 @@ if portfolio:
     k2.metric("Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}")
     k3.metric("Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}")
     k4.metric("Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}")
-st.divider()
-st.subheader("✅ Karbon Vergisi / ETS Hazırlık (Senaryo)")
 
-colA, colB, colC = st.columns([1, 1, 2])
+    # -------------------------------
+    # ETS / Carbon Tax readiness (Scenario)
+    # -------------------------------
+    st.divider()
+    st.subheader("✅ Karbon Vergisi / ETS Hazırlık (Senaryo)")
 
-with colA:
-    ets_price = st.number_input(
-        "Karbon Fiyatı (€/tCO2)",
-        min_value=0.0,
-        value=50.0,
-        step=5.0,
-        help="Senaryo amaçlı fiyat. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde güncellenecektir."
-    )
+    colA, colB, colC = st.columns([1, 1, 2])
 
-with colB:
-    ets_mode = st.selectbox(
-        "Senaryo",
-        ["Conservative", "Base", "Aggressive"],
-        index=1,
-        help="2026–2028 fiyat projeksiyonu demo amaçlıdır."
-    )
+    with colA:
+        st.session_state["ets_price"] = st.number_input(
+            "Karbon Fiyatı (€/tCO2)",
+            min_value=0.0,
+            value=float(st.session_state["ets_price"]),
+            step=5.0,
+            help="Senaryo amaçlıdır. Resmi metodoloji yürürlüğe girdiğinde güncellenecektir."
+        )
 
-# 2026–2028 senaryo fiyatları (demo amaçlı)
-if ets_mode == "Conservative":
-    years = [2026, 2027, 2028]
-    prices = [25, 30, 35]
-elif ets_mode == "Aggressive":
-    years = [2026, 2027, 2028]
-    prices = [60, 75, 90]
-else:  # Base
-    years = [2026, 2027, 2028]
-    prices = [40, 50, 60]
+    with colB:
+        st.session_state["ets_mode"] = st.selectbox(
+            "Senaryo (2026–2028 fiyat projeksiyonu)",
+            ["Conservative", "Base", "Aggressive"],
+            index=["Conservative", "Base", "Aggressive"].index(st.session_state["ets_mode"])
+        )
 
-df_ets = pd.DataFrame({"Yıl": years, "Fiyat (€/tCO2)": prices})
+    df_ets = ets_projection(st.session_state["ets_mode"])
 
-with colC:
-    fig = px.line(df_ets, x="Yıl", y="Fiyat (€/tCO2)", markers=True)
-    fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    with colC:
+        fig = px.line(df_ets, x="Yıl", y="Fiyat (€/tCO2)", markers=True)
+        fig.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
-# Tahmini yükümlülük (senaryo)
-total_tco2 = float(totals["total_ton"])
-ets_liability_eur = total_tco2 * float(ets_price)
+    total_tco2 = float(totals["total_ton"])
+    ets_liability_eur = total_tco2 * float(st.session_state["ets_price"])
 
-m1, m2, m3 = st.columns(3)
-m1.metric("Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:,.2f}")
-m2.metric("Seçili Fiyat (€/tCO2)", f"{float(ets_price):,.2f}")
-m3.metric("Tahmini Yükümlülük (€)", f"{ets_liability_eur:,.0f}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:,.2f}")
+    m2.metric("Seçili Fiyat (€/tCO2)", f"{float(st.session_state['ets_price']):,.2f}")
+    m3.metric("Tahmini Yükümlülük (€)", f"{ets_liability_eur:,.0f}")
 
-st.caption(
-    "Bu bölüm **senaryo amaçlıdır**. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde "
-    "hesaplama parametreleri ve raporlama formatı **resmi metodolojiye göre güncellenecektir**."
-)
+    st.caption(ets_disclaimer_text())
 
+    # Controlled audit log record for demo
+    if st.button("🧾 ETS Senaryosunu Audit Log’a Kaydet", use_container_width=True):
+        append_event_log(
+            "ETS_SENARYO_RUN",
+            payload={
+                "facility_id": "PORTFOLIO",
+                "scope_total_tco2": total_tco2,
+                "price_eur_per_ton": float(st.session_state["ets_price"]),
+                "scenario_mode": st.session_state["ets_mode"],
+                "result_eur": ets_liability_eur,
+                "projection_2026_2028": df_ets.to_dict(orient="records"),
+            }
+        )
+        st.success("Audit log kaydı eklendi: ETS_SENARYO_RUN")
+
+    # -------------------------------
+    # Facility table + charts
+    # -------------------------------
     rows = []
     for f in portfolio["facilities"]:
         fid = f["facility_id"]
@@ -389,7 +475,12 @@ st.caption(
     st.divider()
     st.subheader("PDF Export (Yatırımcı Raporu)")
 
-    pdf_bytes = build_portfolio_pdf_bytes(portfolio, df)
+    pdf_bytes = build_portfolio_pdf_bytes(
+        portfolio,
+        df,
+        ets_price=float(st.session_state["ets_price"]),
+        ets_mode=str(st.session_state["ets_mode"]),
+    )
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     st.download_button(
         "⬇️ PDF Raporunu İndir",
