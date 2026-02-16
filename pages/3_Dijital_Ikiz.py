@@ -1,3 +1,5 @@
+import numpy as np
+
 import json
 import base64
 from io import BytesIO
@@ -284,31 +286,101 @@ def render_plan_mode():
         st.warning("assets/site_plan.png (veya .jpg) bulunamadı. Lütfen görseli 'assets' klasörüne yükle.")
         st.stop()
 
-    # ✅ kritik: görseli küçültüp PNG base64 göm
-    img_uri, width, height = image_to_data_uri_resized(img_path, max_side=1600)
+    # ✅ Görseli numpy array'e çevir (go.Image için)
+    img = Image.open(img_path).convert("RGB")
+    arr = np.array(img)
+    height, width = arr.shape[0], arr.shape[1]
 
     fig = go.Figure()
 
-    # ✅ kritik: top-left anchor
-    fig.add_layout_image(
-        dict(
-            source=img_uri,
-            xref="x",
-            yref="y",
-            x=0,
-            y=height,
-            sizex=width,
-            sizey=height,
-            xanchor="left",
-            yanchor="top",
-            sizing="stretch",
-            layer="below",
-            opacity=1.0,
-        )
-    )
+    # ✅ Arka planı trace olarak koy (layout_image değil)
+    fig.add_trace(go.Image(z=arr))
 
     clipped_polys = 0
     clipped_points = 0
+
+    # ✅ Zonlar (polygon_px üstünden)
+    if show_zones:
+        for z in zones:
+            poly_px = z.get("polygon_px")
+            if not poly_px:
+                continue
+
+            xs, ys = [], []
+            before_clip = False
+
+            for p in poly_px:
+                x0 = float(p[0])
+                y0 = float(p[1])
+                x1, y1 = clamp_point_xy(x0, y0, width - 1, height - 1)
+                if x0 != x1 or y0 != y1:
+                    before_clip = True
+                xs.append(x1)
+                ys.append(y1)
+
+            # kapat
+            xs.append(xs[0])
+            ys.append(ys[0])
+
+            if before_clip:
+                clipped_polys += 1
+
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    name=z.get("name", "Zon"),
+                    line=dict(width=3),
+                )
+            )
+
+    # ✅ Sensörler (x/y plan koordinatı)
+    if show_sensors:
+        xs, ys, names = [], [], []
+        for s in sensors:
+            if "x" in s and "y" in s:
+                x0 = float(s["x"])
+                y0 = float(s["y"])
+                x1, y1 = clamp_point_xy(x0, y0, width - 1, height - 1)
+                if x0 != x1 or y0 != y1:
+                    clipped_points += 1
+                xs.append(x1)
+                ys.append(y1)
+                names.append(s.get("name", "Sensör"))
+
+        if xs:
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="markers+text",
+                    text=names,
+                    textposition="top center",
+                    marker=dict(size=12),
+                    name="Sensörler",
+                )
+            )
+
+    # ✅ Piksel koordinatı: go.Image zaten (0,0) sol üst çalışır
+    # y eksenini ters çeviriyoruz ki pixel mantığı tam otursun
+    fig.update_xaxes(visible=False, range=[0, width - 1], fixedrange=True)
+    fig.update_yaxes(visible=False, range=[height - 1, 0], fixedrange=True, scaleanchor="x")
+
+    fig.update_layout(
+        height=650,
+        margin=dict(l=0, r=0, t=0, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    if clipped_polys > 0 or clipped_points > 0:
+        st.warning(
+            f"Plan koordinatlarında taşma vardı ve otomatik düzeltildi. "
+            f"Zon (clamp): {clipped_polys} | Sensör (clamp): {clipped_points}."
+        )
+
 
     # Zonlar (clamp ile sunumda taşma yok)
     if show_zones:
