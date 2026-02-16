@@ -29,6 +29,9 @@ PLAN_IMG_PNG = Path("assets/site_plan.png")
 PLAN_IMG_JPG = Path("assets/site_plan.jpg")
 
 
+# --------------------------
+# Helpers
+# --------------------------
 def load_json(path: Path):
     if not path.exists():
         st.error(f"Dosya bulunamadı: {path.as_posix()}")
@@ -55,7 +58,6 @@ def load_plan_image_path():
 
 
 def image_to_data_uri(img_path: str) -> str:
-    # Plotly için base64 data URI
     p = Path(img_path)
     b = p.read_bytes()
     ext = p.suffix.lower().replace(".", "")
@@ -64,8 +66,12 @@ def image_to_data_uri(img_path: str) -> str:
     return f"data:image/{ext};base64," + base64.b64encode(b).decode("utf-8")
 
 
+# --------------------------
+# Data load
+# --------------------------
 zones_data = load_json(ZONES_PATH)
 sensors_data = load_json(SENSORS_PATH)
+
 zones = zones_data.get("zones", [])
 sensors = sensors_data.get("sensors", [])
 
@@ -74,7 +80,9 @@ if not zones:
     st.stop()
 
 
-# ---------------- Sidebar ----------------
+# --------------------------
+# Sidebar
+# --------------------------
 st.sidebar.header("Mod")
 view_mode = st.sidebar.radio("Mod seç", ["Harita Modu", "Tesis Planı Modu"], index=0)
 
@@ -103,12 +111,14 @@ water_actual = st.sidebar.number_input("Mevcut Su (m3/yıl)", min_value=0.0, val
 pump_kwh_per_m3 = st.sidebar.number_input("Pompa Enerji İndeksi (kWh/m3)", min_value=0.0, value=0.4)
 
 st.sidebar.divider()
-zone_names = [z["name"] for z in zones]
+zone_names = [z.get("name", "Zon") for z in zones]
 selected_zone_name = st.sidebar.selectbox("Zon seç", zone_names, index=0)
-selected_zone = next(z for z in zones if z["name"] == selected_zone_name)
+selected_zone = next(z for z in zones if z.get("name") == selected_zone_name)
 
 
-# ---------------- Engine + KPI ----------------
+# --------------------------
+# Engine + KPI
+# --------------------------
 total_area_m2 = sum(float(z.get("area_m2", 0)) for z in zones) or 1.0
 
 out = run_biolot(
@@ -126,23 +136,23 @@ out = run_biolot(
     pump_kwh_per_m3=pump_kwh_per_m3,
 )
 
-carbon_total = out["carbon"]
-hvac_total = out["hvac"]
-water_total = out["water"]
-op_total = out["total_operational_gain"]
+carbon_total = out.get("carbon", {})
+hvac_total = out.get("hvac", {})
+water_total = out.get("water", {})
+op_total = out.get("total_operational_gain", {})
 
 zone_area = float(selected_zone.get("area_m2", 0))
 zone_share = max(0.0, min(1.0, zone_area / total_area_m2))
 
 zone_kpi = {
-    "total_ton": carbon_total["total_ton"] * zone_share,
-    "risk_eur": carbon_total["risk_eur"] * zone_share,
-    "hvac_saved_kwh": hvac_total["saved_kwh"] * zone_share,
-    "hvac_saved_eur": hvac_total["saved_eur"] * zone_share,
-    "water_saved_m3": water_total["saved_water_m3"] * zone_share,
-    "pump_saved_kwh": water_total["saved_pump_kwh"] * zone_share,
-    "total_saved_kwh": op_total["total_saved_kwh"] * zone_share,
-    "total_saved_eur": op_total["total_saved_eur"] * zone_share,
+    "total_ton": float(carbon_total.get("total_ton", 0.0)) * zone_share,
+    "risk_eur": float(carbon_total.get("risk_eur", 0.0)) * zone_share,
+    "hvac_saved_kwh": float(hvac_total.get("saved_kwh", 0.0)) * zone_share,
+    "hvac_saved_eur": float(hvac_total.get("saved_eur", 0.0)) * zone_share,
+    "water_saved_m3": float(water_total.get("saved_water_m3", 0.0)) * zone_share,
+    "pump_saved_kwh": float(water_total.get("saved_pump_kwh", 0.0)) * zone_share,
+    "total_saved_kwh": float(op_total.get("total_saved_kwh", 0.0)) * zone_share,
+    "total_saved_eur": float(op_total.get("total_saved_eur", 0.0)) * zone_share,
 }
 
 if zone_kpi["risk_eur"] > 50000:
@@ -155,14 +165,13 @@ else:
 
 def render_right_panel():
     st.subheader("Zon Özeti")
-    st.write(f"**Zon:** {selected_zone['name']}")
+    st.write(f"**Zon:** {selected_zone.get('name','-')}")
     st.write(f"**Alan:** {selected_zone.get('area_m2','-')} m²")
-    st.write(f"**Pay:** %{(zone_share*100):.1f}")
+    st.write(f"**Pay:** %{(zone_share * 100):.1f}")
     st.write(f"**Risk Seviyesi:** {risk_flag}")
 
     st.divider()
     st.subheader("Zon KPI (BIOLOT)")
-
     a1, a2 = st.columns(2)
     a1.metric("Zon Toplam CO2 (t/yıl)", f"{zone_kpi['total_ton']:.2f}")
     a2.metric("Zon Karbon Riski (€)", f"{zone_kpi['risk_eur']:.0f}")
@@ -191,11 +200,14 @@ def render_map_mode():
     if show_zones:
         zones_fg = folium.FeatureGroup(name="Zonlar", show=True)
         for z in zones:
-            poly = z["polygon"]
+            poly = z.get("polygon", [])
+            if not poly:
+                continue
             style = z.get("style", {})
             color = style.get("color", "#2E7D32")
             fill_color = style.get("fillColor", "#66BB6A")
             fill_opacity = style.get("fillOpacity", 0.25)
+
             folium.Polygon(
                 locations=poly,
                 color=color,
@@ -203,13 +215,15 @@ def render_map_mode():
                 fill_color=fill_color,
                 fill_opacity=fill_opacity,
                 weight=3,
-                tooltip=z["name"],
+                tooltip=z.get("name", "Zon"),
             ).add_to(zones_fg)
         zones_fg.add_to(m)
 
     if show_sensors:
         sens_fg = folium.FeatureGroup(name="Sensörler", show=True)
         for s in sensors:
+            if "lat" not in s or "lon" not in s:
+                continue
             folium.CircleMarker(
                 location=[s["lat"], s["lon"]],
                 radius=6,
@@ -217,7 +231,7 @@ def render_map_mode():
                 fill=True,
                 fill_color="#1E88E5",
                 fill_opacity=0.9,
-                tooltip=s["name"],
+                tooltip=s.get("name", "Sensör"),
             ).add_to(sens_fg)
         sens_fg.add_to(m)
 
@@ -225,7 +239,7 @@ def render_map_mode():
         heat_points = []
         for s in sensors:
             temp = s.get("last", {}).get("temp_c", None)
-            if temp is not None:
+            if temp is not None and "lat" in s and "lon" in s:
                 heat_points.append([s["lat"], s["lon"], float(temp)])
         if heat_points:
             hm_fg = folium.FeatureGroup(name="Isı Haritası (Temp)", show=True)
@@ -248,7 +262,7 @@ def render_plan_mode():
 
     fig = go.Figure()
 
-    # ✅ Görseli tek grafiğe göm (overlay kesin çalışır)
+    # Görseli grafiğe göm (overlay stabil)
     fig.add_layout_image(
         dict(
             source=img_uri,
@@ -264,7 +278,7 @@ def render_plan_mode():
         )
     )
 
-    # ✅ Zonlar
+    # Zonlar
     if show_zones:
         for z in zones:
             poly_px = z.get("polygon_px")
@@ -272,32 +286,40 @@ def render_plan_mode():
                 continue
             xs = [p[0] for p in poly_px] + [poly_px[0][0]]
             ys = [p[1] for p in poly_px] + [poly_px[0][1]]
-            fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=z["name"], line=dict(width=3)))
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    name=z.get("name", "Zon"),
+                    line=dict(width=3),
+                )
+            )
 
-    # ✅ Sensörler
+    # Sensörler
     if show_sensors:
         xs, ys, names = [], [], []
         for s in sensors:
             if "x" in s and "y" in s:
                 xs.append(float(s["x"]))
                 ys.append(float(s["y"]))
-                names.append(s["name"])
-        fig.add_trace(
-            go.Scatter(
-                x=xs,
-                y=ys,
-                mode="markers+text",
-                text=names,
-                textposition="top center",
-                marker=dict(size=12),
-                name="Sensörler",
+                names.append(s.get("name", "Sensör"))
+        if xs:
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="markers+text",
+                    text=names,
+                    textposition="top center",
+                    marker=dict(size=12),
+                    name="Sensörler",
+                )
             )
-        )
 
-    # ✅ Piksel ekseni: (0,0) sol-üst
+    # Piksel ekseni: (0,0) sol-üst
     fig.update_xaxes(visible=False, range=[0, width], fixedrange=True)
     fig.update_yaxes(visible=False, range=[height, 0], fixedrange=True, scaleanchor="x")
-
     fig.update_layout(
         height=650,
         margin=dict(l=0, r=0, t=0, b=0),
@@ -307,6 +329,9 @@ def render_plan_mode():
     st.plotly_chart(fig, use_container_width=True)
 
 
+# --------------------------
+# Layout
+# --------------------------
 left, right = st.columns([2, 1], gap="large")
 
 with left:
