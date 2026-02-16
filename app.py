@@ -137,6 +137,56 @@ def ets_disclaimer_text() -> str:
 
 
 # -------------------------------
+# QUICK RECOMMENDATION (Explainable demo)
+# -------------------------------
+def render_quick_recommendation(totals: dict) -> None:
+    """
+    Demo için explainable (kural tabanlı) öneri kutusu.
+    Gerçek AI değil; pilot veri ile geliştirilebilir.
+    """
+    tot_emis = float(totals.get("total_ton", 0.0))
+    tot_saved_eur = float(totals.get("total_saved_eur", 0.0))
+
+    high_emis = tot_emis >= 2000
+    high_saving = tot_saved_eur >= 5000
+    low_saving = tot_saved_eur < 1000
+
+    if high_emis and high_saving:
+        title = "Öncelik: Enerji + HVAC hızlı kazanım"
+        reason = f"Emisyon yüksek ({tot_emis:.0f} tCO2e/yıl) ve tasarruf potansiyeli anlamlı ({tot_saved_eur:.0f} €/yıl)."
+        actions = [
+            "HVAC setpoint / delta-T optimizasyonu (hedef: %3–7 kWh azaltım)",
+            "Elektrik tüketiminde pik saat analizi + yük kaydırma",
+            "Scope-2 azaltımı için yenilenebilir tedarik senaryosu",
+        ]
+    elif high_emis and low_saving:
+        title = "Öncelik: Ölçüm doğrulama + kalibrasyon"
+        reason = f"Emisyon yüksek ({tot_emis:.0f} tCO2e/yıl) ama görünen tasarruf düşük ({tot_saved_eur:.0f} €/yıl)."
+        actions = [
+            "Elektrik ve gaz sayaç doğrulaması + aylık profil",
+            "Emisyon faktörleri ve tesis sınırlarının (Scope) netleştirilmesi",
+            "Zon bazlı sensörlerle HVAC ve su modülünü kalibre et",
+        ]
+    else:
+        title = "Öncelik: ETS hazırlık + stabil iyileştirme"
+        reason = f"Mevcut durumda emisyon {tot_emis:.0f} tCO2e/yıl, tasarruf {tot_saved_eur:.0f} €/yıl."
+        actions = [
+            "ETS senaryosunu 2026–2028 için 3 modla raporla (Yönetim / CFO)",
+            "Su modülünde baseline ve pompa enerji indeksini aylık takip et",
+            "Dijital ikizde pilot zon seçip hızlı doğrulama yap",
+        ]
+
+    st.divider()
+    st.subheader("🤖 Hızlı Öneri (Explainable Demo)")
+    st.markdown(f"**{title}**")
+    st.caption(reason)
+    st.write("**Önerilen aksiyonlar:**")
+    for a in actions:
+        st.write(f"- {a}")
+    st.caption("Not: Bu öneri demo amaçlı, kural-tabanlı explainable moddur. Pilot verilerle geliştirilecektir.")
+
+
+# -------------------------------
 # PDF BUILDER (STABLE)
 # -------------------------------
 def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: float, ets_mode: str) -> bytes:
@@ -456,6 +506,9 @@ if portfolio:
     totals = portfolio["portfolio_totals"]
 
     st.subheader("Portföy KPI")
+
+    # ✅ ÖNERİ BURADA GÖRÜNÜR (KPI BLOĞUNUN İÇİNDE)
+    render_quick_recommendation(totals)
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}")
