@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 import pandas as pd
+import plotly.express as px
 
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
