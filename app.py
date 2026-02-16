@@ -50,6 +50,7 @@ DEFAULT_INPUTS = {
 AUDIT_LOG_DIR = "audit_logs"
 AUDIT_LOG_FILE = os.path.join(AUDIT_LOG_DIR, "runs.jsonl")
 
+
 def append_audit_log(run_id: str, facility_id: str, inputs: dict, outputs: dict) -> None:
     os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
     record = {
@@ -69,6 +70,7 @@ def append_audit_log(run_id: str, facility_id: str, inputs: dict, outputs: dict)
     with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+
 def append_event_log(event_type: str, payload: dict) -> None:
     os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
     record = {
@@ -82,11 +84,13 @@ def append_event_log(event_type: str, payload: dict) -> None:
     with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+
 def read_audit_log_text() -> str:
     if not os.path.exists(AUDIT_LOG_FILE):
         return ""
     with open(AUDIT_LOG_FILE, "r", encoding="utf-8") as f:
         return f.read()
+
 
 # -------------------------------
 # FONT SETUP (Türkçe karakterler için)
@@ -110,6 +114,7 @@ def setup_fonts():
 
     return base_font, bold_font
 
+
 # -------------------------------
 # ETS (Scenario) helpers
 # -------------------------------
@@ -123,18 +128,19 @@ def ets_projection(mode: str) -> pd.DataFrame:
         prices = [40, 50, 60]
     return pd.DataFrame({"Yıl": years, "Fiyat (€/tCO2)": prices})
 
+
 def ets_disclaimer_text() -> str:
     return (
         "Bu bölüm **senaryo amaçlıdır**. Resmi ETS/karbon vergisi metodolojisi yürürlüğe girdiğinde "
         "hesaplama parametreleri ve raporlama formatı **resmi metodolojiye göre güncellenecektir**."
     )
 
+
 # -------------------------------
-# PDF BUILDER
+# PDF BUILDER (STABLE)
 # -------------------------------
 def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: float, ets_mode: str) -> bytes:
     base_font, bold_font = setup_fonts()
-
     styles = getSampleStyleSheet()
     story = []
 
@@ -161,12 +167,12 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
 
     t = Table(kpi_data, hAlign="LEFT", colWidths=[240, 250])
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("FONTSIZE", (0,0), (-1,-1), 10),
-        ("PADDING", (0,0), (-1,-1), 6),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
+        ("FONTNAME", (0, 1), (-1, -1), base_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("PADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(t)
     story.append(Spacer(1, 12))
@@ -191,12 +197,12 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
     ]
     t_ets = Table(ets_table, hAlign="LEFT", colWidths=[240, 250])
     t_ets.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("FONTSIZE", (0,0), (-1,-1), 10),
-        ("PADDING", (0,0), (-1,-1), 6),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
+        ("FONTNAME", (0, 1), (-1, -1), base_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("PADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(t_ets)
     story.append(Spacer(1, 8))
@@ -204,12 +210,12 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
     proj_table = [["Yıl", "Fiyat (€/tCO2)"]] + df_proj.values.tolist()
     t_proj = Table(proj_table, hAlign="LEFT", colWidths=[80, 120])
     t_proj.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("FONTSIZE", (0,0), (-1,-1), 10),
-        ("PADDING", (0,0), (-1,-1), 6),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, 0), bold_font),
+        ("FONTNAME", (0, 1), (-1, -1), base_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("PADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(t_proj)
     story.append(Spacer(1, 6))
@@ -224,7 +230,6 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
     if len(df) > 0:
         df_pdf = df.head(15).copy()
 
-        # Sütunları kısalt + sayıları yuvarla (genişliği düşürür)
         rename_map = {
             "tesis_id": "Tesis",
             "toplam_emisyon_ton": "Top.Emis(t)",
@@ -235,42 +240,41 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
         }
         df_pdf = df_pdf.rename(columns=rename_map)
 
-        # Sadece beklenen sütunlar (güvenli)
         keep_cols = ["Tesis", "Top.Emis(t)", "S1(t)", "S2(t)", "Tasarr(€)", "Tasarr(kWh)"]
         df_pdf = df_pdf[[c for c in keep_cols if c in df_pdf.columns]]
 
-        # Format (çok uzun floatları kes)
         for c in df_pdf.columns:
             if c != "Tesis":
                 df_pdf[c] = pd.to_numeric(df_pdf[c], errors="coerce").fillna(0.0)
 
-        df_pdf["Top.Emis(t)"] = df_pdf["Top.Emis(t)"].map(lambda x: f"{x:,.1f}")
-        df_pdf["S1(t)"] = df_pdf["S1(t)"].map(lambda x: f"{x:,.1f}")
-        df_pdf["S2(t)"] = df_pdf["S2(t)"].map(lambda x: f"{x:,.1f}")
+        if "Top.Emis(t)" in df_pdf.columns:
+            df_pdf["Top.Emis(t)"] = df_pdf["Top.Emis(t)"].map(lambda x: f"{x:,.1f}")
+        if "S1(t)" in df_pdf.columns:
+            df_pdf["S1(t)"] = df_pdf["S1(t)"].map(lambda x: f"{x:,.1f}")
+        if "S2(t)" in df_pdf.columns:
+            df_pdf["S2(t)"] = df_pdf["S2(t)"].map(lambda x: f"{x:,.1f}")
         if "Tasarr(€)" in df_pdf.columns:
             df_pdf["Tasarr(€)"] = df_pdf["Tasarr(€)"].map(lambda x: f"{x:,.0f}")
         if "Tasarr(kWh)" in df_pdf.columns:
             df_pdf["Tasarr(kWh)"] = df_pdf["Tasarr(kWh)"].map(lambda x: f"{x:,.0f}")
 
         table_data = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
-
-        # A4 için güvenli kolon genişlikleri (toplam ~500)
         col_widths = [70, 80, 60, 60, 70, 90]
+
         t2 = Table(table_data, hAlign="LEFT", colWidths=col_widths, repeatRows=1)
         t2.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-            ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-            ("FONTNAME", (0,0), (-1,0), bold_font),
-            ("FONTNAME", (0,1), (-1,-1), base_font),
-            ("FONTSIZE", (0,0), (-1,-1), 8),
-            ("PADDING", (0,0), (-1,-1), 4),
-            ("ALIGN", (1,1), (-1,-1), "RIGHT"),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("FONTNAME", (0, 0), (-1, 0), bold_font),
+            ("FONTNAME", (0, 1), (-1, -1), base_font),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("PADDING", (0, 0), (-1, -1), 4),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
         ]))
         story.append(t2)
     else:
         story.append(Paragraph(f"<font name='{base_font}'>Tablo için veri yok.</font>", styles["Normal"]))
 
-    # Daha dar margin ile sayfa taşmasını azalt
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -284,103 +288,6 @@ def build_portfolio_pdf_bytes(portfolio: dict, df: pd.DataFrame, ets_price: floa
     doc.build(story)
     return buf.getvalue()
 
-    base_font, bold_font = setup_fonts()
-
-    styles = getSampleStyleSheet()
-    story = []
-
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    story.append(Paragraph(f"<font name='{bold_font}'>BIOLOT – Portföy Raporu</font>", styles["Title"]))
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(f"<font name='{base_font}'>Oluşturulma: {now_utc}</font>", styles["Normal"]))
-    story.append(Paragraph(f"<font name='{base_font}'>Motor Versiyonu: {BIOL0T_ENGINE_VERSION}</font>", styles["Normal"]))
-    story.append(Spacer(1, 14))
-
-    totals = portfolio["portfolio_totals"]
-    kpi_data = [
-        ["Gösterge", "Değer"],
-        ["Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}"],
-        ["Scope 1 (t/yıl)", f"{totals['scope1_ton']:.2f}"],
-        ["Scope 2 (t/yıl)", f"{totals['scope2_ton']:.2f}"],
-        ["Toplam Enerji Tasarrufu (kWh/yıl)", f"{totals['total_saved_kwh']:.0f}"],
-        ["Toplam Kaçınılan Maliyet (€ / yıl)", f"{totals['total_saved_eur']:.2f}"],
-        ["Toplam Önlenen CO2 (t/yıl)", f"{totals['total_saved_co2_ton']:.3f}"],
-    ]
-
-    t = Table(kpi_data, hAlign="LEFT")
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("PADDING", (0,0), (-1,-1), 6),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 14))
-
-    # --- ETS Section (PDF) ---
-    total_tco2 = float(totals["total_ton"])
-    ets_liability = total_tco2 * float(ets_price)
-    df_proj = ets_projection(ets_mode)
-
-    story.append(Paragraph(f"<font name='{bold_font}'>Karbon Vergisi / ETS Hazırlık Modülü (Senaryo)</font>", styles["Heading2"]))
-    story.append(Spacer(1, 6))
-
-    ets_table = [
-        ["Gösterge", "Değer"],
-        ["Toplam Emisyon (tCO2e/yıl)", f"{total_tco2:.2f}"],
-        ["Seçili Karbon Fiyatı (€/tCO2)", f"{float(ets_price):.2f}"],
-        ["Tahmini Yükümlülük (€)", f"{ets_liability:.0f}"],
-        ["Senaryo", str(ets_mode)],
-    ]
-    t_ets = Table(ets_table, hAlign="LEFT")
-    t_ets.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("PADDING", (0,0), (-1,-1), 6),
-    ]))
-    story.append(t_ets)
-    story.append(Spacer(1, 8))
-
-    # projection table
-    proj_table = [["Yıl", "Fiyat (€/tCO2)"]] + df_proj.values.tolist()
-    t_proj = Table(proj_table, hAlign="LEFT")
-    t_proj.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), bold_font),
-        ("FONTNAME", (0,1), (-1,-1), base_font),
-        ("PADDING", (0,0), (-1,-1), 6),
-    ]))
-    story.append(t_proj)
-    story.append(Spacer(1, 8))
-    story.append(Paragraph(f"<font name='{base_font}'>{ets_disclaimer_text()}</font>", styles["Normal"]))
-    story.append(Spacer(1, 14))
-
-    # --- Facility summary table ---
-    story.append(Paragraph(f"<font name='{bold_font}'>Tesis Özeti (Tablo)</font>", styles["Heading2"]))
-    if len(df) > 0:
-        df_pdf = df.head(15).copy()
-        table_data = [df_pdf.columns.tolist()] + df_pdf.values.tolist()
-        t2 = Table(table_data, hAlign="LEFT")
-        t2.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-            ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-            ("FONTNAME", (0,0), (-1,0), bold_font),
-            ("FONTNAME", (0,1), (-1,-1), base_font),
-            ("PADDING", (0,0), (-1,-1), 6),
-        ]))
-        story.append(t2)
-    else:
-        story.append(Paragraph(f"<font name='{base_font}'>Tablo için veri yok.</font>", styles["Normal"]))
-
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, title="BIOLOT Portföy Raporu")
-    doc.build(story)
-    return buf.getvalue()
 
 # -------------------------------
 # SESSION STATE
@@ -390,11 +297,11 @@ if "facilities" not in st.session_state:
 if "portfolio_result" not in st.session_state:
     st.session_state["portfolio_result"] = None
 
-# ETS UI state
 if "ets_price" not in st.session_state:
     st.session_state["ets_price"] = 50.0
 if "ets_mode" not in st.session_state:
     st.session_state["ets_mode"] = "Base"
+
 
 # -------------------------------
 # UI
@@ -404,7 +311,6 @@ st.title("BIOLOT – Portföy Dashboard")
 st.caption(f"Motor Versiyonu: {BIOL0T_ENGINE_VERSION}")
 
 st.divider()
-
 st.subheader("Tesis Yönetimi")
 
 col1, col2 = st.columns([2, 1])
@@ -430,7 +336,6 @@ if st.button("🗑️ Seçili Tesisi Sil", disabled=(remove_id == "(silme)")):
     st.success(f"{remove_id} silindi.")
 
 st.divider()
-
 st.subheader("Tesis Girdileri")
 
 if len(st.session_state["facilities"]) == 0:
@@ -444,33 +349,56 @@ else:
             a, b, c = st.columns(3)
 
             with a:
-                inp["electricity_kwh_year"] = st.number_input("Yıllık Elektrik (kWh)", min_value=0.0, value=float(inp["electricity_kwh_year"]), key=f"{fid}_el")
-                inp["natural_gas_m3_year"] = st.number_input("Yıllık Doğalgaz (m³)", min_value=0.0, value=float(inp["natural_gas_m3_year"]), key=f"{fid}_gas")
-                inp["area_m2"] = st.number_input("Toplam Alan (m²)", min_value=1.0, value=float(inp["area_m2"]), key=f"{fid}_area")
+                inp["electricity_kwh_year"] = st.number_input(
+                    "Yıllık Elektrik (kWh)", min_value=0.0, value=float(inp["electricity_kwh_year"]), key=f"{fid}_el"
+                )
+                inp["natural_gas_m3_year"] = st.number_input(
+                    "Yıllık Doğalgaz (m³)", min_value=0.0, value=float(inp["natural_gas_m3_year"]), key=f"{fid}_gas"
+                )
+                inp["area_m2"] = st.number_input(
+                    "Toplam Alan (m²)", min_value=1.0, value=float(inp["area_m2"]), key=f"{fid}_area"
+                )
 
             with b:
-                inp["carbon_price"] = st.number_input("Karbon Fiyatı (€/ton)", min_value=0.0, value=float(inp["carbon_price"]), key=f"{fid}_cp")
-                inp["grid_factor"] = st.number_input("Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=float(inp["grid_factor"]), key=f"{fid}_gf")
-                inp["gas_factor"] = st.number_input("Gaz Emisyon Faktörü (kgCO2/m³)", min_value=0.0, value=float(inp["gas_factor"]), key=f"{fid}_gaf")
+                inp["carbon_price"] = st.number_input(
+                    "Karbon Fiyatı (€/ton)", min_value=0.0, value=float(inp["carbon_price"]), key=f"{fid}_cp"
+                )
+                inp["grid_factor"] = st.number_input(
+                    "Elektrik Emisyon Faktörü (kgCO2/kWh)", min_value=0.0, value=float(inp["grid_factor"]), key=f"{fid}_gf"
+                )
+                inp["gas_factor"] = st.number_input(
+                    "Gaz Emisyon Faktörü (kgCO2/m³)", min_value=0.0, value=float(inp["gas_factor"]), key=f"{fid}_gaf"
+                )
 
             with c:
-                inp["delta_t"] = st.number_input("Mikroklima Etkisi (°C)", min_value=0.0, value=float(inp["delta_t"]), key=f"{fid}_dt")
-                inp["energy_sensitivity"] = st.number_input("1°C Başına Enerji Azalış Oranı", min_value=0.0, value=float(inp["energy_sensitivity"]), key=f"{fid}_es")
-                inp["beta"] = st.number_input("Bina Elastikiyet Katsayısı", min_value=0.0, value=float(inp["beta"]), key=f"{fid}_beta")
+                inp["delta_t"] = st.number_input(
+                    "Mikroklima Etkisi (°C)", min_value=0.0, value=float(inp["delta_t"]), key=f"{fid}_dt"
+                )
+                inp["energy_sensitivity"] = st.number_input(
+                    "1°C Başına Enerji Azalış Oranı", min_value=0.0, value=float(inp["energy_sensitivity"]), key=f"{fid}_es"
+                )
+                inp["beta"] = st.number_input(
+                    "Bina Elastikiyet Katsayısı", min_value=0.0, value=float(inp["beta"]), key=f"{fid}_beta"
+                )
 
             st.markdown("**Su / Pompa**")
             w1, w2, w3 = st.columns(3)
             with w1:
-                inp["water_baseline"] = st.number_input("Referans Su (m³/yıl)", min_value=0.0, value=float(inp["water_baseline"]), key=f"{fid}_wb")
+                inp["water_baseline"] = st.number_input(
+                    "Referans Su (m³/yıl)", min_value=0.0, value=float(inp["water_baseline"]), key=f"{fid}_wb"
+                )
             with w2:
-                inp["water_actual"] = st.number_input("Mevcut Su (m³/yıl)", min_value=0.0, value=float(inp["water_actual"]), key=f"{fid}_wa")
+                inp["water_actual"] = st.number_input(
+                    "Mevcut Su (m³/yıl)", min_value=0.0, value=float(inp["water_actual"]), key=f"{fid}_wa"
+                )
             with w3:
-                inp["pump_kwh_per_m3"] = st.number_input("Pompa Enerji İndeksi (kWh/m³)", min_value=0.0, value=float(inp["pump_kwh_per_m3"]), key=f"{fid}_pk")
+                inp["pump_kwh_per_m3"] = st.number_input(
+                    "Pompa Enerji İndeksi (kWh/m³)", min_value=0.0, value=float(inp["pump_kwh_per_m3"]), key=f"{fid}_pk"
+                )
 
             fac["inputs"] = inp
 
 st.divider()
-
 st.subheader("Portföy Analizi")
 
 run_all = st.button("🚀 Tüm Tesisleri Çalıştır", type="primary")
@@ -523,69 +451,11 @@ if run_all:
     st.success("Portföy analizi tamamlandı.")
 
 portfolio = st.session_state.get("portfolio_result")
-    if portfolio:
+
+if portfolio:
     totals = portfolio["portfolio_totals"]
 
     st.subheader("Portföy KPI")
-
-
-
-    st.divider()
-st.subheader("🤖 Hızlı Öneri Modu (Explainable)")
-
-tot_emis = float(totals["total_ton"])
-tot_saving_eur = float(totals["total_saved_eur"])
-tot_saving_kwh = float(totals["total_saved_kwh"])
-
-# Basit eşikler (demo amaçlı)
-high_emis = tot_emis >= 2000
-high_saving = tot_saving_eur >= 5000
-low_saving = tot_saving_eur < 1000
-
-rec_title = ""
-rec_reason = ""
-rec_action = ""
-
-if high_emis and high_saving:
-    rec_title = "Öncelik: Enerji + HVAC hızlı kazanım"
-    rec_reason = (
-        f"Toplam emisyon {tot_emis:.0f} tCO2e/yıl seviyesinde ve operasyonda "
-        f"{tot_saving_eur:.0f} €/yıl kaçınılan maliyet potansiyeli görünüyor."
-    )
-    rec_action = (
-        "1) HVAC setpoint / delta-T optimizasyonu (hedef: %3–7 kWh azaltım)\n"
-        "2) Elektrik tüketim profilinde pik saat analizi + yük kaydırma\n"
-        "3) Scope-2 azaltımı için şebeke faktörü/yenilenebilir tedarik senaryosu"
-    )
-elif high_emis and low_saving:
-    rec_title = "Öncelik: Emisyon kaynağı doğrulama + ölçüm altyapısı"
-    rec_reason = (
-        f"Emisyon yüksek ({tot_emis:.0f} tCO2e/yıl) ancak görünen tasarruf düşük "
-        f"({tot_saving_eur:.0f} €/yıl). Bu genellikle ölçüm/varsayım kalibrasyonu ihtiyacına işaret eder."
-    )
-    rec_action = (
-        "1) Elektrik ve gaz sayaç doğrulaması + aylık profil\n"
-        "2) Grid/gaz emisyon faktörü ve tesis sınırlarının (Scope) netleştirilmesi\n"
-        "3) Zon bazlı sensör yerleşimi ile HVAC ve su modülünün kalibrasyonu"
-    )
-else:
-    rec_title = "Öncelik: Stabil iyileştirme + ETS hazırlık"
-    rec_reason = (
-        f"Mevcut durumda emisyon {tot_emis:.0f} tCO2e/yıl ve tasarruf "
-        f"{tot_saving_eur:.0f} €/yıl seviyesinde. Platform ETS hazırlık senaryoları için hazır."
-    )
-    rec_action = (
-        "1) ETS senaryosunu 2026–2028 için 3 fiyat modu ile raporlayıp yönetime sun\n"
-        "2) Su modülünde baseline ve pompa enerji indeksini aylık takip et\n"
-        "3) Dijital ikizde kritik zonları işaretleyip pilot alanı seç"
-    )
-
-st.markdown(f"### ✅ {rec_title}")
-st.write("**Gerekçe (Explainable):**", rec_reason)
-st.write("**Önerilen Aksiyonlar:**")
-st.code(rec_action)
-st.caption("Not: Bu öneri demo amaçlı, kural-tabanlı explainable moddur. Pilot verilerle kurallar/parametreler geliştirilecektir.")
-
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Toplam Emisyon (tCO2e/yıl)", f"{totals['total_ton']:.2f}")
@@ -634,7 +504,6 @@ st.caption("Not: Bu öneri demo amaçlı, kural-tabanlı explainable moddur. Pil
 
     st.caption(ets_disclaimer_text())
 
-    # Controlled audit log record for demo
     if st.button("🧾 ETS Senaryosunu Audit Log’a Kaydet", use_container_width=True):
         append_event_log(
             "ETS_SENARYO_RUN",
